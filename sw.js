@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
   const key = req.mode === 'navigate' ? './index.html' : req;
   // описание приложения (manifest) всегда берём свежим, чтобы Chrome видел актуальные данные для установки
   if (req.url.endsWith('.webmanifest')) {
-    e.respondWith(fetch(req).then(res => { if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone())); return res; })
+    e.respondWith(fetch(req).then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); } return res; })
       .catch(() => caches.match(req, { ignoreSearch: true })));
     return;
   }
