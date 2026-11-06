@@ -2,6 +2,7 @@
   "name": "Учёт занятий",
   "short_name": "Занятия",
   "description": "Личное расписание занятий и учёт оплат",
+  "id": "./?app=uchet-zanyatiya",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",
