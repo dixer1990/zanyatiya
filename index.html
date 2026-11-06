@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6f6b">
+<title>Учёт занятий</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f2ed;--card:#fff;--ink:#1d2321;--mut:#6b736f;--line:#e3e0d8;
+  --acc:#1f6f6b;--accb:#e3efed;
+  --ok:#2c7a4b;--okb:#e3f2e8;--warn:#9a5b00;--warnb:#fcefd6;--bad:#b3261e;--badb:#fbe4e2;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 8px;font-weight:700;font-size:21px;max-width:560px;margin:0 auto}
+main{max-width:560px;margin:0 auto;padding:0 12px calc(96px + env(safe-area-inset-bottom))}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav .in{display:flex;width:100%;max-width:560px}
+nav button{flex:1;border:0;background:none;padding:8px 0 10px;font-size:12px;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:3px}
+nav svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--acc);font-weight:600}
+
+.banner{display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:12px;margin:0 0 8px;font-size:15px}
+.banner span{margin-left:auto;font-size:20px;line-height:1}
+.banner.warn{background:var(--warnb);color:var(--warn)}
+.banner.bad{background:var(--badb);color:var(--bad)}
+.banner.info{background:var(--accb);color:var(--acc)}
+
+.weekhead{display:flex;align-items:center;justify-content:space-between;margin:10px 0 6px;text-align:center}
+.weekhead small{display:block;color:var(--mut)}
+.nav{width:44px;height:44px;border-radius:22px;border:1px solid var(--line);background:#fff;font-size:22px}
+.link{border:0;background:none;color:var(--acc);padding:8px 0;font-size:15px;display:block}
+.link.danger{color:var(--bad)}
+.weekhead .link{display:inline;padding:0;font-size:13px}
+
+.day{margin:14px 0 4px}
+.dh{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em;margin:0 4px 6px}
+.day.today .dh{color:var(--acc);font-weight:700}
+.none{color:#aaa;font-size:14px;margin:0 4px}
+
+.les{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px;margin-bottom:6px;min-height:58px;border-left:4px solid var(--acc)}
+.les .tm{font-weight:700;font-variant-numeric:tabular-nums;width:46px}
+.les .mid{flex:1;min-width:0}
+.les .mid b{font-weight:600}
+.les small,.stu small{display:block;color:var(--mut);font-size:13px}
+.les.done{border-left-color:var(--ok)}
+.les.cancel{border-left-color:#bbb;opacity:.6}
+.les.cancel b{text-decoration:line-through}
+.les.due{border-left-color:var(--warn)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--bad);margin-left:6px;vertical-align:middle}
+.chk{width:44px;height:44px;border-radius:22px;border:2px solid var(--ok);background:#fff;color:var(--ok);font-size:20px;font-weight:700;flex:none}
+
+.chip{display:inline-block;font-size:13px;padding:3px 9px;border-radius:20px;background:#eee;color:var(--mut);white-space:nowrap}
+.chip.ok{background:var(--okb);color:var(--ok)}
+.chip.warn{background:var(--warnb);color:var(--warn)}
+.chip.bad{background:var(--badb);color:var(--bad)}
+.chip.off{background:#eee;color:#888}
+
+.fab{position:fixed;right:max(16px,calc(50% - 264px));bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:28px;border:0;background:var(--acc);color:#fff;font-size:30px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:6}
+
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin:6px 0 10px}
+.stu{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:6px}
+.stu>div{flex:1;min-width:0}
+.empty{background:var(--card);border-radius:14px;padding:16px;color:var(--mut);margin:10px 0}
+
+.pri,.btn{border:0;border-radius:12px;padding:12px 16px;background:var(--accb);color:var(--acc);font-weight:600;min-height:46px}
+.pri{background:var(--acc);color:#fff}
+.btn.danger{background:var(--badb);color:var(--bad)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.btns>*{flex:1 1 auto}
+
+.box{background:var(--card);border-radius:14px;padding:14px;margin:8px 0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.stats>div{background:var(--card);border-radius:14px;padding:12px}
+.stats small{display:block;color:var(--mut);font-size:13px}
+.stats b{font-size:20px}
+.neg{color:var(--bad)}
+h2{margin:0 40px 4px 0;font-size:21px}
+h3{font-size:14px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);margin:18px 0 6px}
+.muted{color:var(--mut);margin:0 0 8px}
+.note{background:var(--warnb);color:var(--warn);padding:8px 12px;border-radius:10px;font-size:14px}
+.state{font-weight:600;margin:12px 0}
+.state.ok{color:var(--ok)}.state.off{color:#888}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row small{color:var(--mut)}
+.row:last-child{border-bottom:0}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px}
+.quick button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font-size:14px}
+
+label{display:block;font-size:14px;color:var(--mut);margin:10px 0}
+input,select,textarea{display:block;width:100%;margin-top:4px;font:inherit;color:var(--ink);padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.two{display:flex;gap:8px}.two>label{flex:1}
+
+#sheet{position:fixed;inset:0;z-index:20;display:none}
+body.sheet-open #sheet{display:block}
+body.sheet-open{overflow:hidden}
+#sheet .bd{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+#panel{position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:92vh;overflow:auto;background:var(--bg);border-radius:20px 20px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+#panel .x{position:absolute;right:10px;top:10px;width:40px;height:40px;border-radius:20px;border:0;background:#e9e6df;font-size:16px}
+
+#toast{position:fixed;left:50%;transform:translate(-50%,20px);bottom:calc(84px + env(safe-area-inset-bottom));background:#222;color:#fff;padding:11px 16px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;transition:.2s;z-index:30;width:max-content;max-width:92vw;display:flex;gap:14px;align-items:center}
+#toast span{flex:1 1 auto}
+#toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast button{border:0;background:none;color:#8fd3cd;font-weight:700;padding:0}
+</style>
+</head>
+<body>
+<header id="title">Расписание</header>
+<main id="view"></main>
+<nav><div class="in">
+  <button data-a="tab" data-t="sched"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Расписание</button>
+  <button data-a="tab" data-t="stu"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14.5c2.2 0 4 1.4 4.6 4"/></svg>Ученики</button>
+  <button data-a="tab" data-t="money"><svg viewBox="0 0 24 24"><path d="M8 20V4h6a4 4 0 0 1 0 8H6M6 16h8"/></svg>Деньги</button>
+  <button data-a="tab" data-t="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>Ещё</button>
+</div></nav>
+<div id="sheet"><div class="bd" data-a="close"></div><div id="panel"></div></div>
+<div id="toast"></div>
+<input type="file" id="importFile" accept=".txt,.json,text/plain,application/json" hidden>
+
+<script>
+'use strict';
+const VERSION = '1.0 · 7 ноября 2026';
+const KEY = 'uchet-data-v1';
+
+/* ---------- даты ---------- */
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const pd = s => { const [a, b, c] = s.split('-').map(Number); return new Date(a, b - 1, c); };
+const addD = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const wdOf = s => (pd(s).getDay() + 6) % 7 + 1;            // 1 = пн … 7 = вс
+const today = () => ymd(new Date());
+const nowHM = () => { const d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const monday = s => addD(s, 1 - wdOf(s));
+const daysBetween = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+const WD = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const WDF = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+const MG = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const MN = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const fmtD = s => { const d = pd(s); return `${WD[wdOf(s) - 1]}, ${d.getDate()} ${MG[d.getMonth()]}`; };
+const fmtS = s => { const d = pd(s); return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`; };
+const endT = (t, dur) => { const [h, m] = t.split(':').map(Number); const x = h * 60 + m + (+dur || 0); return pad(Math.floor(x / 60) % 24) + ':' + pad(x % 60); };
+const rub = n => new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' ₽';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const $ = s => document.querySelector(s);
+const val = id => (document.getElementById(id)?.value ?? '').trim();
+const lessonsWord = n => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'занятие' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'занятия' : 'занятий'; };
+
+/* ---------- данные ---------- */
+function blank() { return { v: 1, students: [], slots: [], ov: {}, extra: [], pays: [], limit: 2, lastBackup: null, created: today() }; }
+function fix(s) {
+  const b = blank();
+  for (const k in b) if (s[k] === undefined) s[k] = b[k];
+  return s;
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v) return fix(s); } catch (e) {}
+  return blank();
+}
+let S = load();
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { toast('Не удалось сохранить! Сделайте копию данных во вкладке «Ещё».'); }
+}
+const stu = id => S.students.find(s => s.id === id);
+const slotById = id => S.slots.find(x => x.id === id);
+
+/* Занятия = постоянные слоты (повторяются каждую неделю) + изменения отдельных дат (ov) + разовые занятия (extra) */
+function slotOcc(sl, orig, o, key) {
+  return {
+    kind: 'slot', key, slotId: sl.id, sid: sl.sid, orig,
+    date: o.date || orig, time: o.time || sl.time, dur: o.dur || sl.dur,
+    status: o.status || '', price: o.price,
+    moved: !!((o.date && o.date !== orig) || (o.time && o.time !== sl.time))
+  };
+}
+function occ(from, to) {
+  const out = [], seen = new Set();
+  for (const sl of S.slots) {
+    const st = sl.from > from ? sl.from : from;
+    const en = sl.to && sl.to < to ? sl.to : to;
+    if (st > en) continue;
+    for (let d = addD(st, (sl.wd - wdOf(st) + 7) % 7); d <= en; d = addD(d, 7)) {
+      const key = sl.id + '|' + d, o = S.ov[key] || {};
+      seen.add(key);
+      if (o.date && o.date !== d) continue;      // перенесено на другой день — покажем ниже
+      out.push(slotOcc(sl, d, o, key));
+    }
+  }
+  for (const key in S.ov) {                      // перенесённые сюда и прочие изменения
+    const o = S.ov[key], [slid, orig] = key.split('|');
+    const eff = o.date || orig;
+    if (eff < from || eff > to) continue;
+    if (seen.has(key) && (!o.date || o.date === orig)) continue;
+    const sl = slotById(slid); if (!sl) continue;
+    out.push(slotOcc(sl, orig, o, key));
+  }
+  for (const e of S.extra) if (e.date >= from && e.date <= to)
+    out.push({ kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price });
+  return out.filter(o => stu(o.sid)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+const refOf = o => o.kind === 'extra' ? 'e:' + o.id : 'k:' + o.key;
+function getOcc(ref) {
+  if (ref.startsWith('e:')) {
+    const e = S.extra.find(x => x.id === ref.slice(2));
+    return e && { kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price };
+  }
+  const key = ref.slice(2), [slid, orig] = key.split('|'), sl = slotById(slid);
+  return sl && slotOcc(sl, orig, S.ov[key] || {}, key);
+}
+function setOcc(o, patch) {
+  if (o.kind === 'extra') {
+    const e = S.extra.find(x => x.id === o.id);
+    Object.assign(e, patch);
+    for (const k in e) if (e[k] === undefined) delete e[k];
+  } else {
+    const sl = slotById(o.slotId), v = Object.assign({}, S.ov[o.key] || {}, patch);
+    for (const k in v) if (v[k] === undefined || v[k] === '') delete v[k];
+    if (v.date === o.orig) delete v.date;
+    if (v.time === sl.time) delete v.time;
+    if (Object.keys(v).length) S.ov[o.key] = v; else delete S.ov[o.key];
+  }
+  save();
+}
+const isPast = o => o.date < today() || (o.date === today() && o.time <= nowHM());
+
+/* Баланс ученика: оплаты минус проведённые занятия. Неоплаченные считаются по порядку, от старых к новым. */
+let BAL = {};
+function doneLessons(sid) {
+  const L = [];
+  for (const key in S.ov) {
+    const o = S.ov[key]; if (o.status !== 'done') continue;
+    const [slid, orig] = key.split('|'), sl = slotById(slid);
+    if (!sl || sl.sid !== sid) continue;
+    L.push({ date: o.date || orig, time: o.time || sl.time, price: +o.price || 0 });
+  }
+  for (const e of S.extra) if (e.sid === sid && e.status === 'done') L.push({ date: e.date, time: e.time, price: +e.price || 0 });
+  return L.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+function bal(sid) {
+  if (BAL[sid]) return BAL[sid];
+  const L = doneLessons(sid), s = stu(sid);
+  const paid = S.pays.filter(p => p.sid === sid).reduce((a, p) => a + (+p.amount || 0), 0);
+  const cost = L.reduce((a, l) => a + l.price, 0);
+  let rest = paid, unpaid = 0;
+  for (const l of L) { if (rest >= l.price) rest -= l.price; else { unpaid++; rest = 0; } }
+  const balance = paid - cost;
+  const ahead = balance > 0 && s && s.rate > 0 ? Math.floor(balance / s.rate) : 0;
+  return (BAL[sid] = { paid, cost, count: L.length, balance, unpaid, ahead, lessons: L });
+}
+function badge(b) {
+  if (b.unpaid >= S.limit) return `<span class="chip bad">не оплачено: ${b.unpaid}</span>`;
+  if (b.unpaid > 0) return `<span class="chip warn">не оплачено: ${b.unpaid}</span>`;
+  if (b.balance > 0) return `<span class="chip ok">аванс: ${b.ahead ? b.ahead + ' зан.' : rub(b.balance)}</span>`;
+  return `<span class="chip">в расчёте</span>`;
+}
+const activeSlots = sid => S.slots.filter(x => x.sid === sid && (!x.to || x.to >= today()) && x.to !== addD(x.from, -1))
+  .sort((a, b) => (a.wd + a.time).localeCompare(b.wd + b.time));
+function endSlot(sl, from) {         // слот больше не действует начиная с даты from
+  sl.to = addD(from, -1);
+  for (const key in S.ov) {
+    const [slid, orig] = key.split('|');
+    if (slid === sl.id && orig >= from && S.ov[key].status !== 'done') delete S.ov[key];
+  }
+  if (sl.to < sl.from && !Object.keys(S.ov).some(k => k.startsWith(sl.id + '|')))
+    S.slots = S.slots.filter(x => x !== sl);
+}
+function unmarked() { const t = today(); return occ(addD(t, -60), t).filter(o => !o.status && isPast(o)); }
+
+/* ---------- экраны ---------- */
+let tab = 'sched', weekStart = monday(today()), moneyMonth = today().slice(0, 7), showArchive = false, sheetFn = null, deferredPrompt = null, UNDO = null;
+
+function backupBanner() {
+  if (!S.students.length) return '';
+  const days = S.lastBackup ? daysBetween(S.lastBackup, today()) : null;
+  if (days === null && daysBetween(S.created, today()) < 1) return '';
+  if (days !== null && days < 7) return '';
+  return `<div class="banner info" data-a="export">${days === null ? 'Копия данных ещё не сохранялась' : `Копия данных не сохранялась ${days} дн.`} — сохранить <span>›</span></div>`;
+}
+
+function card(o) {
+  const s = stu(o.sid), past = isPast(o);
+  const cls = o.status || (past ? 'due' : 'plan');
+  const sub = [`до ${endT(o.time, o.dur)}`];
+  if (o.moved) sub.push('перенесено');
+  if (o.kind === 'extra') sub.push('разовое');
+  let right = '';
+  if (o.status === 'done') right = `<span class="chip ok">✓ проведено</span>`;
+  else if (o.status === 'cancel') right = `<span class="chip off">отмена</span>`;
+  else if (past) right = `<button class="chk" data-a="quickDone" data-r="${refOf(o)}" aria-label="Провёл">✓</button>`;
+  const dot = bal(o.sid).unpaid >= S.limit ? '<i class="dot"></i>' : '';
+  return `<div class="les ${cls}" data-a="openLes" data-r="${refOf(o)}"><div class="tm">${o.time}</div>
+    <div class="mid"><b>${esc(s.name)}</b>${dot}<small>${sub.join(' · ')}</small></div>${right}</div>`;
+}
+
+function vSched() {
+  const t = today(), we = addD(weekStart, 6), L = occ(weekStart, we);
+  let h = '';
+  const un = unmarked();
+  if (un.length) h += `<div class="banner warn" data-a="openUnmarked">Не отмечено прошедших занятий: <b>${un.length}</b><span>›</span></div>`;
+  for (const s of S.students.filter(s => !s.archived)) {
+    const b = bal(s.id);
+    if (b.unpaid >= S.limit) h += `<div class="banner bad" data-a="openStu" data-id="${s.id}">${esc(s.name)}: не оплачено ${b.unpaid} ${lessonsWord(b.unpaid)}${b.unpaid > S.limit ? ' — больше предела' : ' — это предел'}<span>›</span></div>`;
+  }
+  h += backupBanner();
+  const ws = pd(weekStart), wee = pd(we);
+  const title = ws.getMonth() === wee.getMonth() ? `${ws.getDate()}–${wee.getDate()} ${MG[ws.getMonth()]}` : `${ws.getDate()} ${MG[ws.getMonth()]} – ${wee.getDate()} ${MG[wee.getMonth()]}`;
+  const act = L.filter(o => o.status !== 'cancel'), dn = L.filter(o => o.status === 'done');
+  h += `<div class="weekhead"><button class="nav" data-a="wk" data-d="-7" aria-label="Прошлая неделя">‹</button>
+    <div><b>${title}</b><small>занятий: ${act.length}${dn.length ? ', проведено: ' + dn.length : ''}${weekStart !== monday(t) ? ' · <button class="link" data-a="wkToday">к этой неделе</button>' : ''}</small></div>
+    <button class="nav" data-a="wk" data-d="7" aria-label="Следующая неделя">›</button></div>`;
+  if (!S.students.filter(s => !s.archived).length) h += `<div class="empty">Начните со вкладки «Ученики»: добавьте ученика, его ставку и постоянное время занятий — расписание появится здесь само.</div>`;
+  for (let i = 0; i < 7; i++) {
+    const d = addD(weekStart, i), ls = L.filter(o => o.date === d);
+    h += `<div class="day${d === t ? ' today' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}</div>`;
+    h += ls.length ? ls.map(card).join('') : `<div class="none">нет занятий</div>`;
+    h += `</div>`;
+  }
+  h += `<button class="fab" data-a="newExtra" aria-label="Разовое занятие">+</button>`;
+  return h;
+}
+
+function slotsText(sid) {
+  const a = activeSlots(sid);
+  return a.length ? a.map(x => `${WD[x.wd - 1]} ${x.time}`).join(', ') : 'нет постоянного времени';
+}
+function vStu() {
+  const list = S.students.filter(s => !!s.archived === showArchive).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  let h = `<div class="toolbar">${showArchive ? '<b>Архив</b>' : `<button class="pri" data-a="newStu">+ Ученик</button>`}
+    <button class="link" data-a="toggleArch">${showArchive ? '← к активным' : 'Архив'}</button></div>`;
+  if (!list.length) h += `<div class="empty">${showArchive ? 'В архиве пусто.' : 'Пока нет учеников. Нажмите «+ Ученик».'}</div>`;
+  for (const s of list) h += `<div class="stu" data-a="openStu" data-id="${s.id}"><div><b>${esc(s.name)}</b>
+    <small>${rub(s.rate)} · ${showArchive ? 'в архиве' : slotsText(s.id)}</small></div>${badge(bal(s.id))}</div>`;
+  return h;
+}
+
+function vMoney() {
+  const [y, m] = moneyMonth.split('-').map(Number);
+  const from = moneyMonth + '-01', to = ymd(new Date(y, m, 0));
+  const pays = S.pays.filter(p => p.date >= from && p.date <= to).sort((a, b) => b.date.localeCompare(a.date));
+  const recv = pays.reduce((a, p) => a + (+p.amount || 0), 0);
+  const L = occ(from, to), done = L.filter(o => o.status === 'done'), canc = L.filter(o => o.status === 'cancel');
+  const earned = done.reduce((a, o) => a + (+o.price || 0), 0);
+  const yearRecv = S.pays.filter(p => p.date.startsWith(y + '-')).reduce((a, p) => a + (+p.amount || 0), 0);
+  const cur = today().slice(0, 7);
+  let h = `<div class="weekhead"><button class="nav" data-a="mon" data-d="-1">‹</button><div><b>${MN[m - 1]} ${y}</b>${moneyMonth !== cur ? '<small><button class="link" data-a="monToday">к текущему месяцу</button></small>' : ''}</div><button class="nav" data-a="mon" data-d="1">›</button></div>
+  <div class="stats">
+    <div><small>Получено оплат</small><b>${rub(recv)}</b></div>
+    <div><small>Проведено занятий</small><b>${done.length}</b><small>на ${rub(earned)}</small></div>
+    <div><small>Отменено</small><b>${canc.length}</b></div>
+    <div><small>Получено за ${y} год</small><b>${rub(yearRecv)}</b></div>
+  </div>
+  <p class="muted" style="font-size:13px">«Получено» — это деньги, которые пришли в этом месяце: на них выбиваются чеки в «Мой налог». «Проведено» — занятия, которые вы отметили.</p>`;
+  const debt = S.students.filter(s => !s.archived && bal(s.id).unpaid > 0);
+  if (debt.length) {
+    h += `<h3>Есть неоплаченные занятия</h3><div class="box">`;
+    for (const s of debt) { const b = bal(s.id); h += `<div class="row" data-a="openStu" data-id="${s.id}"><span>${esc(s.name)}</span><span>${badge(b)} <small>${rub(-b.balance)}</small></span></div>`; }
+    h += `</div>`;
+  }
+  h += `<h3>Оплаты за месяц</h3>`;
+  h += pays.length ? `<div class="box">${pays.map(p => `<div class="row" data-a="openStu" data-id="${p.sid}"><span>${fmtS(p.date)} · ${esc(stu(p.sid)?.name || '—')}${p.note ? `<small>${esc(p.note)}</small>` : ''}</span><b>${rub(p.amount)}</b></div>`).join('')}</div>`
+    : `<div class="empty">Оплат в этом месяце нет.</div>`;
+  return h;
+}
+
+function vMore() {
+  const last = S.lastBackup ? `Последняя копия: ${fmtD(S.lastBackup)}.` : 'Копия ещё не сохранялась.';
+  return `<h3>Копия данных</h3><div class="box">
+    <p style="margin-top:0">Все данные хранятся только в этом телефоне. Сохраняйте копию раз в неделю — например, отправляйте файл себе в Telegram или на почту. Если телефон сменится, загрузите копию в приложение на новом.</p>
+    <p class="muted">${last}</p>
+    <div class="btns"><button class="pri" data-a="export">Сохранить копию</button><button class="btn" data-a="import">Загрузить из копии</button></div></div>
+  <h3>Правило оплаты</h3><div class="box">
+    <label>Сколько занятий можно провести без оплаты<input id="f_limit" type="number" inputmode="numeric" min="1" value="${S.limit}"></label>
+    <p class="muted" style="font-size:13px">Когда у ученика набирается столько неоплаченных занятий, он подсвечивается красным.</p>
+    <button class="btn" data-a="saveLimit">Сохранить</button></div>
+  <h3>Установка на телефон</h3><div class="box">
+    ${deferredPrompt ? `<button class="pri" data-a="install">Установить приложение</button>` : `<p style="margin:0">В Chrome: меню ⋮ → «Добавить на главный экран» или «Установить приложение». Если вы уже открыли приложение со значка — всё установлено.</p>`}
+    <p class="muted" id="persist" style="font-size:13px;margin:10px 0 0"></p></div>
+  <p class="muted" style="font-size:13px;text-align:center;margin-top:20px">Версия ${VERSION}</p>`;
+}
+
+const VIEWS = { sched: vSched, stu: vStu, money: vMoney, more: vMore };
+const TITLES = { sched: 'Расписание', stu: 'Ученики', money: 'Деньги', more: 'Ещё' };
+function render() {
+  BAL = {};
+  $('#title').textContent = TITLES[tab];
+  $('#view').innerHTML = VIEWS[tab]();
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+  if (tab === 'more' && navigator.storage?.persisted) navigator.storage.persisted().then(p => {
+    const el = $('#persist'); if (el) el.textContent = p ? 'Хранилище защищено от автоматической очистки.' : 'Хранилище пока не защищено от автоочистки — после установки на главный экран это обычно исправляется само.';
+  });
+}
+
+/* ---------- всплывающая панель ---------- */
+function openSheet(fn) {
+  const was = !!sheetFn; sheetFn = fn;
+  if (!was) history.pushState({ sh: 1 }, '');
+  document.body.classList.add('sheet-open'); drawSheet();
+  $('#panel').scrollTop = 0;
+}
+function drawSheet() {
+  if (!sheetFn) return;
+  const h = sheetFn();
+  if (h == null) { closeSheet(); return; }
+  $('#panel').innerHTML = `<button class="x" data-a="close" aria-label="Закрыть">✕</button>` + h;
+}
+function hideSheet() { sheetFn = null; document.body.classList.remove('sheet-open'); $('#panel').innerHTML = ''; }
+function closeSheet() { if (!sheetFn) return; if (history.state && history.state.sh) history.back(); else hideSheet(); }
+window.addEventListener('popstate', hideSheet);
+function refresh() { BAL = {}; render(); drawSheet(); }
+
+let toastT;
+function toast(msg, undo) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(msg)}</span>` + (undo ? '<button data-a="undo">Отменить</button>' : '');
+  UNDO = undo || null; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => { t.classList.remove('on'); UNDO = null; }, undo ? 5000 : 2800);
+}
+const snap = () => JSON.stringify(S);
+const undoTo = s => () => { S = fix(JSON.parse(s)); save(); refresh(); toast('Отменено'); };
+
+/* ---------- панели ---------- */
+function sLes(ref) {
+  const o = getOcc(ref); if (!o) return null;
+  const s = stu(o.sid);
+  let h = `<h2>${esc(s.name)}</h2><p class="muted">${fmtD(o.date)} · ${o.time}–${endT(o.time, o.dur)}${o.kind === 'extra' ? ' · разовое' : ''}</p>`;
+  if (o.kind === 'slot' && o.moved) h += `<p class="note">Перенесено. По расписанию было: ${fmtD(o.orig)}, ${slotById(o.slotId).time}</p>`;
+  if (!o.status) {
+    h += `<label>Цена занятия, ₽<input id="f_price" type="number" inputmode="numeric" value="${s.rate}"></label>
+      <div class="btns"><button class="pri" data-a="lesDone" data-r="${ref}">✓ Провёл</button></div>
+      <div class="btns"><button class="btn" data-a="lesMoveForm" data-r="${ref}">Перенести</button><button class="btn danger" data-a="lesCancel" data-r="${ref}">Отменить</button></div>`;
+  } else if (o.status === 'done') {
+    h += `<p class="state ok">✓ Проведено · ${rub(o.price)}</p><div class="btns"><button class="btn" data-a="lesUndo" data-r="${ref}">Снять отметку</button></div>`;
+  } else {
+    h += `<p class="state off">Отменено</p><div class="btns"><button class="btn" data-a="lesUndo" data-r="${ref}">Вернуть в расписание</button></div>`;
+  }
+  if (o.kind === 'slot' && o.moved && o.status !== 'done') h += `<button class="link" data-a="lesRestore" data-r="${ref}">Вернуть на время по расписанию</button>`;
+  if (o.kind === 'extra' && o.status !== 'done') h += `<button class="link danger" data-a="lesDel" data-r="${ref}">Удалить это разовое занятие</button>`;
+  h += `<button class="link" data-a="openStu" data-id="${s.id}">Карточка ученика ›</button>`;
+  return h;
+}
+function sMove(ref) {
+  const o = getOcc(ref); if (!o) return null;
+  return `<h2>Перенос</h2><p class="muted">${esc(stu(o.sid).name)} · сейчас: ${fmtD(o.date)}, ${o.time}</p>
+    <div class="two"><label>Новая дата<input id="f_date" type="date" value="${o.date}"></label><label>Время<input id="f_time" type="time" value="${o.time}"></label></div>
+    <p class="muted" style="font-size:13px">Переносится только это занятие. Чтобы поменять постоянное время, откройте карточку ученика → «Расписание».</p>
+    <div class="btns"><button class="pri" data-a="lesMove" data-r="${ref}">Перенести</button><button class="btn" data-a="back" data-r="${ref}">Назад</button></div>`;
+}
+function sUnmarked() {
+  const un = unmarked();
+  if (!un.length) return `<h2>Всё отмечено</h2><p class="muted">Неотмеченных прошедших занятий нет.</p>`;
+  let h = `<h2>Не отмечены</h2><p class="muted">Нажмите ✓, если занятие прошло, или откройте его, чтобы отменить или перенести.</p>`;
+  let d = '';
+  for (const o of un) { if (o.date !== d) { d = o.date; h += `<div class="dh" style="margin-top:12px">${fmtD(d)}</div>`; } h += card(o); }
+  h += `<div class="btns"><button class="btn" data-a="allDone">Отметить все как проведённые</button></div>`;
+  return h;
+}
+function sExtra() {
+  const list = S.students.filter(s => !s.archived).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  if (!list.length) return `<h2>Разовое занятие</h2><div class="empty">Сначала добавьте ученика во вкладке «Ученики».</div>`;
+  const d = weekStart === monday(today()) ? today() : weekStart;
+  return `<h2>Разовое занятие</h2><p class="muted">Дополнительное занятие вне постоянного расписания.</p>
+    <label>Ученик<select id="f_sid">${list.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    <div class="two"><label>Дата<input id="f_date" type="date" value="${d}"></label><label>Время<input id="f_time" type="time" value="16:00"></label></div>
+    <label>Длительность, мин<input id="f_dur" type="number" inputmode="numeric" value="60"></label>
+    <div class="btns"><button class="pri" data-a="saveExtra">Добавить</button></div>`;
+}
+function sStuForm(id) {
+  const s = id ? stu(id) : { name: '', rate: '', note: '' };
+  return `<h2>${id ? 'Изменить ученика' : 'Новый ученик'}</h2>
+    <label>Имя<input id="f_name" value="${esc(s.name)}" placeholder="Например, Маша (ОГЭ)"></label>
+    <label>Цена одного занятия, ₽<input id="f_rate" type="number" inputmode="numeric" value="${esc(s.rate)}"></label>
+    <label>Заметка (необязательно)<input id="f_note" value="${esc(s.note)}" placeholder="контакт родителя, класс, цель…"></label>
+    ${id ? '<p class="muted" style="font-size:13px">Новая цена действует для занятий, которые вы отметите дальше. Уже проведённые остаются по старой.</p>' : ''}
+    <div class="btns"><button class="pri" data-a="saveStu" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>`;
+}
+function sStu(id) {
+  const s = stu(id); if (!s) return null;
+  const b = bal(id);
+  let h = `<h2>${esc(s.name)}</h2><p class="muted">${rub(s.rate)} за занятие${s.note ? ' · ' + esc(s.note) : ''}</p>
+    <div>${badge(b)}</div>
+    <div class="stats">
+      <div><small>Всего оплачено</small><b>${rub(b.paid)}</b></div>
+      <div><small>Проведено занятий</small><b>${b.count}</b><small>на ${rub(b.cost)}</small></div>
+    </div>
+    <div class="box" style="margin-top:0">${b.balance < 0 ? `Долг: <b class="neg">${rub(-b.balance)}</b> (${b.unpaid} ${lessonsWord(b.unpaid)})`
+      : b.balance > 0 ? `Оплачено вперёд: <b>${rub(b.balance)}</b>${b.ahead ? ` — примерно ${b.ahead} ${lessonsWord(b.ahead)}` : ''}` : 'Всё оплачено, долга и аванса нет.'}</div>`;
+  if (!s.archived) h += `<div class="btns"><button class="pri" data-a="payForm" data-id="${id}">+ Оплата</button><button class="btn" data-a="editStu" data-id="${id}">Изменить</button></div>
+    <h3>Постоянное расписание</h3><div class="box">${activeSlots(id).map(x => `<div class="row" data-a="slotForm" data-id="${id}" data-slot="${x.id}"><span>${WDF[x.wd - 1]}, ${x.time}–${endT(x.time, x.dur)}</span><small>${x.from > today() ? 'с ' + fmtS(x.from) : ''}${x.to ? ' до ' + fmtS(x.to) : ''} ›</small></div>`).join('') || '<p class="muted" style="margin:0">Постоянного времени нет.</p>'}
+    <button class="link" data-a="slotForm" data-id="${id}">+ Добавить время</button></div>`;
+  const pays = S.pays.filter(p => p.sid === id).sort((a, b) => b.date.localeCompare(a.date));
+  h += `<h3>Оплаты</h3>` + (pays.length ? `<div class="box">${pays.map(p => `<div class="row" data-a="payDel" data-p="${p.id}"><span>${fmtS(p.date)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</span><b>${rub(p.amount)}</b></div>`).join('')}</div><p class="muted" style="font-size:13px">Чтобы удалить ошибочную оплату, нажмите на неё.</p>` : `<div class="empty">Оплат пока не было.</div>`);
+  const L = b.lessons.slice(-12).reverse();
+  if (L.length) h += `<h3>Последние проведённые</h3><div class="box">${L.map(l => `<div class="row"><span>${fmtD(l.date)}, ${l.time}</span><small>${rub(l.price)}</small></div>`).join('')}</div>`;
+  h += s.archived
+    ? `<div class="btns"><button class="btn" data-a="unarch" data-id="${id}">Вернуть из архива</button><button class="btn danger" data-a="delStu" data-id="${id}">Удалить навсегда</button></div>`
+    : `<button class="link danger" data-a="arch" data-id="${id}">Перестал заниматься — в архив</button>`;
+  return h;
+}
+function sSlot(id, slotId) {
+  const sl = slotId ? slotById(slotId) : { wd: 1, time: '16:00', dur: 60 };
+  const s = stu(id);
+  return `<h2>${slotId ? 'Изменить время' : 'Постоянное время'}</h2><p class="muted">${esc(s.name)} · повторяется каждую неделю</p>
+    <label>День недели<select id="f_wd">${WDF.map((w, i) => `<option value="${i + 1}"${sl.wd === i + 1 ? ' selected' : ''}>${w}</option>`).join('')}</select></label>
+    <div class="two"><label>Время<input id="f_time" type="time" value="${sl.time}"></label><label>Минут<input id="f_dur" type="number" inputmode="numeric" value="${sl.dur}"></label></div>
+    <label>${slotId ? 'Изменение действует с' : 'Начиная с'}<input id="f_from" type="date" value="${today()}"></label>
+    ${slotId ? '<p class="muted" style="font-size:13px">Прошлые занятия останутся как были. Разовые переносы после этой даты сбросятся.</p>' : ''}
+    <div class="btns"><button class="pri" data-a="saveSlot" data-id="${id}" data-slot="${slotId || ''}">Сохранить</button></div>
+    ${slotId ? `<button class="link danger" data-a="delSlot" data-id="${id}" data-slot="${slotId}">Убрать это время из расписания (с указанной даты)</button>` : ''}`;
+}
+function sPay(id) {
+  const s = stu(id), b = bal(id);
+  const sug = b.balance < 0 ? -b.balance : s.rate;
+  return `<h2>Оплата</h2><p class="muted">${esc(s.name)}${b.balance < 0 ? ` · долг ${rub(-b.balance)}` : ''}</p>
+    <label>Сумма, ₽<input id="f_amt" type="number" inputmode="numeric" value="${sug || ''}"></label>
+    <div class="quick">${b.balance < 0 ? `<button data-a="payQuick" data-v="${-b.balance}">весь долг</button>` : ''}${[1, 4, 8].map(n => `<button data-a="payQuick" data-v="${n * s.rate}">${n} ${lessonsWord(n)}</button>`).join('')}</div>
+    <label>Дата<input id="f_date" type="date" value="${today()}"></label>
+    <label>Заметка (необязательно)<input id="f_note" placeholder="например, пакет на ноябрь"></label>
+    <div class="btns"><button class="pri" data-a="savePay" data-id="${id}">Записать оплату</button></div>`;
+}
+
+/* ---------- действия ---------- */
+function afterDone(sid, name) {
+  BAL = {};
+  const b = bal(sid);
+  return b.unpaid > S.limit ? ` ⚠ не оплачено уже ${b.unpaid}` : b.unpaid === S.limit ? ` · не оплачено ${b.unpaid} — предел` : '';
+}
+const A = {
+  tab: d => { tab = d.t; window.scrollTo(0, 0); render(); },
+  close: () => closeSheet(),
+  undo: () => { if (UNDO) { const u = UNDO; UNDO = null; u(); } },
+  wk: d => { weekStart = addD(weekStart, +d.d); render(); },
+  wkToday: () => { weekStart = monday(today()); render(); },
+  mon: d => { const [y, m] = moneyMonth.split('-').map(Number); const n = new Date(y, m - 1 + (+d.d), 1); moneyMonth = ymd(n).slice(0, 7); render(); },
+  monToday: () => { moneyMonth = today().slice(0, 7); render(); },
+  toggleArch: () => { showArchive = !showArchive; render(); },
+
+  openLes: d => openSheet(() => sLes(d.r)),
+  openUnmarked: () => openSheet(sUnmarked),
+  openStu: d => openSheet(() => sStu(d.id)),
+  back: d => openSheet(() => sLes(d.r)),
+  quickDone: d => {
+    const o = getOcc(d.r); if (!o) return; const s = stu(o.sid), u = snap();
+    setOcc(o, { status: 'done', price: s.rate });
+    toast(`✓ ${s.name}${afterDone(o.sid)}`, undoTo(u)); refresh();
+  },
+  lesDone: d => {
+    const o = getOcc(d.r), s = stu(o.sid), u = snap();
+    const p = val('f_price'); const price = p === '' ? s.rate : Math.max(0, +p);
+    setOcc(o, { status: 'done', price });
+    closeSheet(); toast(`✓ ${s.name}${afterDone(o.sid)}`, undoTo(u)); refresh();
+  },
+  lesCancel: d => {
+    const o = getOcc(d.r), u = snap();
+    setOcc(o, { status: 'cancel', price: undefined });
+    closeSheet(); toast('Занятие отменено', undoTo(u)); refresh();
+  },
+  lesUndo: d => { const o = getOcc(d.r); setOcc(o, { status: undefined, price: undefined }); refresh(); },
+  lesMoveForm: d => openSheet(() => sMove(d.r)),
+  lesMove: d => {
+    const o = getOcc(d.r), date = val('f_date'), time = val('f_time');
+    if (!date || !time) return toast('Укажите дату и время');
+    const u = snap();
+    setOcc(o, { date, time });
+    closeSheet(); toast(`Перенесено на ${fmtD(date)}, ${time}`, undoTo(u));
+    weekStart = monday(date); refresh();
+  },
+  lesRestore: d => { const o = getOcc(d.r); setOcc(o, { date: undefined, time: undefined }); closeSheet(); toast('Возвращено на время по расписанию'); refresh(); },
+  lesDel: d => {
+    if (!confirm('Удалить это разовое занятие?')) return;
+    const id = d.r.slice(2); S.extra = S.extra.filter(e => e.id !== id); save(); closeSheet(); refresh();
+  },
+  allDone: () => {
+    const un = unmarked(); if (!un.length || !confirm(`Отметить ${un.length} ${lessonsWord(un.length)} как проведённые?`)) return;
+    const u = snap();
+    for (const o of un) setOcc(getOcc(refOf(o)), { status: 'done', price: stu(o.sid).rate });
+    toast('Отмечено', undoTo(u)); refresh();
+  },
+  newExtra: () => openSheet(sExtra),
+  saveExtra: () => {
+    const sid = val('f_sid'), date = val('f_date'), time = val('f_time'), dur = +val('f_dur') || 60;
+    if (!sid || !date || !time) return toast('Заполните дату и время');
+    S.extra.push({ id: uid(), sid, date, time, dur }); save();
+    closeSheet(); weekStart = monday(date); toast('Разовое занятие добавлено'); refresh();
+  },
+
+  newStu: () => openSheet(() => sStuForm(null)),
+  editStu: d => openSheet(() => sStuForm(d.id)),
+  saveStu: d => {
+    const name = val('f_name'), rate = +val('f_rate'), note = val('f_note');
+    if (!name) return toast('Введите имя');
+    if (!(rate >= 0)) return toast('Проверьте цену');
+    if (d.id) { Object.assign(stu(d.id), { name, rate, note }); save(); openSheet(() => sStu(d.id)); }
+    else { const id = uid(); S.students.push({ id, name, rate, note }); save(); openSheet(() => sSlot(id, null)); toast('Ученик добавлен. Теперь укажите постоянное время'); }
+    refresh();
+  },
+  slotForm: d => openSheet(() => sSlot(d.id, d.slot || null)),
+  saveSlot: d => {
+    const wd = +val('f_wd'), time = val('f_time'), dur = +val('f_dur') || 60, from = val('f_from') || today();
+    if (!time) return toast('Укажите время');
+    if (d.slot) {
+      const sl = slotById(d.slot);
+      if (sl.wd === wd && sl.time === time && sl.dur === dur) { openSheet(() => sStu(d.id)); return; }
+      endSlot(sl, from);
+    }
+    S.slots.push({ id: uid(), sid: d.id, wd, time, dur, from, to: null }); save();
+    openSheet(() => sStu(d.id)); toast('Расписание сохранено'); refresh();
+  },
+  delSlot: d => {
+    const from = val('f_from') || today();
+    if (!confirm(`Убрать это время из расписания начиная с ${fmtD(from)}?`)) return;
+    endSlot(slotById(d.slot), from); save(); openSheet(() => sStu(d.id)); refresh();
+  },
+  payForm: d => openSheet(() => sPay(d.id)),
+  payQuick: d => { $('#f_amt').value = d.v; },
+  savePay: d => {
+    const amount = +val('f_amt'), date = val('f_date') || today(), note = val('f_note');
+    if (!(amount > 0)) return toast('Введите сумму');
+    const u = snap();
+    S.pays.push({ id: uid(), sid: d.id, date, amount, note }); save();
+    openSheet(() => sStu(d.id)); toast(`Оплата ${rub(amount)} записана`, undoTo(u)); refresh();
+  },
+  payDel: d => {
+    const p = S.pays.find(x => x.id === d.p);
+    if (!p || !confirm(`Удалить оплату ${rub(p.amount)} от ${fmtS(p.date)}?`)) return;
+    const u = snap(); S.pays = S.pays.filter(x => x !== p); save(); toast('Оплата удалена', undoTo(u)); refresh();
+  },
+  arch: d => {
+    const s = stu(d.id);
+    if (!confirm(`Перенести «${s.name}» в архив? Постоянные занятия начиная с завтра уберутся из расписания. Оплаты и история сохранятся.`)) return;
+    for (const sl of S.slots.filter(x => x.sid === d.id && (!x.to || x.to > today()))) endSlot(sl, addD(today(), 1));
+    s.archived = true; save(); closeSheet(); refresh();
+  },
+  unarch: d => { stu(d.id).archived = false; save(); toast('Возвращён. Добавьте постоянное время заново'); refresh(); },
+  delStu: d => {
+    const s = stu(d.id);
+    if (!confirm(`Удалить «${s.name}» навсегда вместе со всеми занятиями и оплатами? Это не отменить.`)) return;
+    const ids = new Set(S.slots.filter(x => x.sid === d.id).map(x => x.id));
+    for (const k in S.ov) if (ids.has(k.split('|')[0])) delete S.ov[k];
+    S.slots = S.slots.filter(x => x.sid !== d.id); S.extra = S.extra.filter(x => x.sid !== d.id);
+    S.pays = S.pays.filter(x => x.sid !== d.id); S.students = S.students.filter(x => x.id !== d.id);
+    save(); closeSheet(); refresh();
+  },
+
+  saveLimit: () => { const n = Math.round(+val('f_limit')); if (!(n >= 1)) return toast('Нужно число от 1'); S.limit = n; save(); toast('Сохранено'); refresh(); },
+  export: exportData,
+  import: () => $('#importFile').click(),
+  install: async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; render(); },
+};
+
+async function exportData() {
+  const name = `uchet-kopiya-${today()}.txt`;
+  const json = JSON.stringify(S);
+  const file = new File([json], name, { type: 'text/plain' });
+  const mark = () => { S.lastBackup = today(); save(); refresh(); toast('Копия сохранена'); };
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Копия: учёт занятий' }); mark(); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  mark();
+}
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || !Array.isArray(d.students) || !Array.isArray(d.pays)) throw 0;
+    const info = `учеников: ${d.students.length}, оплат: ${d.pays.length}${d.lastBackup ? ', копия от ' + fmtD(d.lastBackup) : ''}`;
+    if (!confirm(`Заменить текущие данные копией (${info})? Текущие данные будут заменены.`)) return;
+    S = fix(d); save(); tab = 'sched'; weekStart = monday(today()); refresh(); toast('Данные загружены из копии');
+  } catch (err) { toast('Это не похоже на файл копии'); }
+});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-a]'); if (!t) return;
+  const f = A[t.dataset.a]; if (f) { e.preventDefault(); f(t.dataset, t, e); }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; if (tab === 'more') render(); });
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+</script>
+</body>
+</html>
