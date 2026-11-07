@@ -67,11 +67,22 @@ nav button.on{color:var(--acc);font-weight:600}
 .ic.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 .ic.x{background:#e9e6df;border-color:#e9e6df;color:#8a857c}
 .ic.mv{background:var(--accb);border-color:var(--accb);color:var(--acc)}
-.icw{display:flex;flex-direction:column;align-items:center;width:38px;flex:none}
+.icw{display:flex;flex-direction:column;align-items:center;width:35px;flex:none}
 .icw .ic{width:32px;height:32px}
 .icw .ic svg{width:17px;height:17px}
 .icw small{font-size:9.5px;line-height:1.15;color:var(--acc);text-align:center;white-space:nowrap;margin-top:1px;display:block}
 .ic.ph{visibility:hidden}
+.acts .ic{width:35px;height:35px}
+.acts .ic svg{width:19px;height:19px}
+.ic.doc.has{background:var(--acc);border-color:var(--acc);color:#fff}
+.les.task{border-left-color:#8a6fb0}
+.les.task.tdone{opacity:.55}.les.task.tdone b{text-decoration:line-through}
+.ic.tk.ok{background:#8a6fb0;border-color:#8a6fb0;color:#fff}
+.hwprev{background:var(--accb);color:var(--acc);padding:8px 12px;border-radius:10px;font-size:14px;margin:8px 0}
+.choice{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.choice button{text-align:left;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:#fff;font-size:16px}
+.choice small{display:block;color:var(--mut);font-size:13px}
+textarea{resize:vertical;min-height:70px}
 .ic.rub.owe{border-color:var(--bad);color:var(--bad)}
 .ic.rub.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--bad);margin-left:6px;vertical-align:middle}
@@ -148,7 +159,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.7 · 7 ноября 2026';
+const VERSION = '1.8 · 7 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -176,7 +187,7 @@ const val = id => (document.getElementById(id)?.value ?? '').trim();
 const lessonsWord = n => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'занятие' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'занятия' : 'занятий'; };
 
 /* ---------- данные ---------- */
-function blank() { return { v: 1, students: [], slots: [], ov: {}, extra: [], pays: [], limit: 2, lastBackup: null, created: today() }; }
+function blank() { return { v: 1, students: [], slots: [], ov: {}, extra: [], pays: [], tasks: [], limit: 2, lastBackup: null, created: today() }; }
 function fix(s) {
   const b = blank();
   for (const k in b) if (s[k] === undefined) s[k] = b[k];
@@ -199,7 +210,7 @@ function slotOcc(sl, orig, o, key) {
   return {
     kind: 'slot', key, slotId: sl.id, sid: sl.sid, orig,
     date: o.date || orig, time: o.time || sl.time, dur: o.dur || sl.dur,
-    status: o.status || '', price: o.price,
+    status: o.status || '', price: o.price, topic: o.topic, hw: o.hw,
     moved: !!((o.date && o.date !== orig) || (o.time && o.time !== sl.time))
   };
 }
@@ -225,14 +236,14 @@ function occ(from, to) {
     out.push(slotOcc(sl, orig, o, key));
   }
   for (const e of S.extra) if (e.date >= from && e.date <= to)
-    out.push({ kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price });
+    out.push({ kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price, topic: e.topic, hw: e.hw });
   return out.filter(o => stu(o.sid)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
 const refOf = o => o.kind === 'extra' ? 'e:' + o.id : 'k:' + o.key;
 function getOcc(ref) {
   if (ref.startsWith('e:')) {
     const e = S.extra.find(x => x.id === ref.slice(2));
-    return e && { kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price };
+    return e && { kind: 'extra', id: e.id, sid: e.sid, date: e.date, time: e.time, dur: e.dur, status: e.status || '', price: e.price, topic: e.topic, hw: e.hw };
   }
   const key = ref.slice(2), [slid, orig] = key.split('|'), sl = slotById(slid);
   return sl && slotOcc(sl, orig, S.ov[key] || {}, key);
@@ -261,9 +272,9 @@ function doneLessons(sid) {
     const o = S.ov[key]; if (o.status !== 'done') continue;
     const [slid, orig] = key.split('|'), sl = slotById(slid);
     if (!sl || sl.sid !== sid) continue;
-    L.push({ date: o.date || orig, time: o.time || sl.time, price: +o.price || 0 });
+    L.push({ date: o.date || orig, time: o.time || sl.time, price: +o.price || 0, topic: o.topic });
   }
-  for (const e of S.extra) if (e.sid === sid && e.status === 'done') L.push({ date: e.date, time: e.time, price: +e.price || 0 });
+  for (const e of S.extra) if (e.sid === sid && e.status === 'done') L.push({ date: e.date, time: e.time, price: +e.price || 0, topic: e.topic });
   return L.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
 function bal(sid) {
@@ -359,32 +370,39 @@ const ICON = {
   check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
   move: '<svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg>',
-  rub: '<svg viewBox="0 0 24 24"><path d="M9 20V4.5h5a3.75 3.75 0 0 1 0 7.5H6.5M6.5 16H14"/></svg>'
+  rub: '<svg viewBox="0 0 24 24"><path d="M9 20V4.5h5a3.75 3.75 0 0 1 0 7.5H6.5M6.5 16H14"/></svg>',
+  doc: '<svg viewBox="0 0 24 24"><path d="M7 3.5h6.5L18 8v12.5H7zM13.5 3.5V8H18M9.5 12.5h6M9.5 16h6"/></svg>'
 };
 function card(o) {
   const s = stu(o.sid), past = isPast(o), ref = refOf(o);
   if (o.ghost) {   // старое место перенесённого занятия
     return `<div class="les ghost" data-a="openLes" data-r="${ref}"><div class="tm">${o.time}</div>
       <div class="mid"><b>${esc(s.name)}</b><small>перенесено</small></div>
-      <div class="acts"><div class="icw"><span class="ic mv">${ICON.move}</span><small>${WD[wdOf(o.to) - 1]} ${fmtS(o.to)}<br>${o.toTime}</small></div><span class="ic ph"></span></div></div>`;
+      <div class="acts"><div class="icw"><span class="ic mv">${ICON.move}</span><small>${WD[wdOf(o.to) - 1]} ${fmtS(o.to)}<br>${o.toTime}</small></div><span class="ic ph"></span><span class="ic ph"></span></div></div>`;
   }
   const cls = o.status || (past ? 'due' : 'plan');
+  const docBtn = `<button class="ic doc${o.topic || o.hw ? ' has' : ''}" data-a="noteForm" data-r="${ref}" aria-label="Заметки к занятию">${ICON.doc}</button>`;
   const sub = [`до ${endT(o.time, o.dur)}`];
   if (o.moved) sub.push(o.date !== o.orig ? `перенесено с ${WD[wdOf(o.orig) - 1]}` : 'время изменено');
   if (o.kind === 'extra') sub.push('разовое');
   let right;
-  if (o.status === 'cancel') right = `<div class="acts"><span class="ic x">${ICON.x}</span><span class="ic ph"></span></div>`;
+  if (o.status === 'cancel') right = `<div class="acts"><span class="ic x">${ICON.x}</span><span class="ic ph"></span>${docBtn}</div>`;
   else {
     const isPaid = cov(o.sid).paid.has(ref);
     const rubBtn = `<button class="ic rub${isPaid ? ' ok' : o.status === 'done' ? ' owe' : ''}" data-a="quickPay" data-r="${ref}" aria-label="${isPaid ? 'Оплачено' : 'Записать оплату'}">${ICON.rub}</button>`;
     const chk = o.status === 'done'
       ? `<button class="ic ok" data-a="quickUndo" data-r="${ref}" aria-label="Снять отметку">${ICON.check}</button>`
       : `<button class="ic${past ? ' due' : ''}" data-a="quickDone" data-r="${ref}" aria-label="Провёл">${ICON.check}</button>`;
-    right = `<div class="acts">${chk}${rubBtn}</div>`;
+    right = `<div class="acts">${chk}${rubBtn}${docBtn}</div>`;
   }
   const dot = bal(o.sid).unpaid >= S.limit ? '<i class="dot"></i>' : '';
   return `<div class="les ${cls}" data-a="openLes" data-r="${ref}"><div class="tm">${o.time}</div>
     <div class="mid"><b>${esc(s.name)}${dot}</b><small>${sub.join(' · ')}</small></div>${right}</div>`;
+}
+function taskCard(t) {
+  return `<div class="les task${t.done ? ' tdone' : ''}" data-a="openTask" data-id="${t.id}"><div class="tm">${t.from || ''}</div>
+    <div class="mid"><b>${esc(t.text)}</b><small>${t.to ? 'до ' + t.to + ' · ' : t.from ? '' : 'без времени · '}дело</small></div>
+    <div class="acts"><button class="ic tk${t.done ? ' ok' : ''}" data-a="taskDone" data-id="${t.id}" aria-label="Сделано">${ICON.check}</button><span class="ic ph"></span><span class="ic ph"></span></div></div>`;
 }
 // бледные плитки на старом месте перенесённых занятий
 function ghosts(from, to) {
@@ -418,12 +436,12 @@ function vSched() {
     <button class="nav" data-a="wk" data-d="7" aria-label="Следующая неделя">›</button></div>`;
   if (!S.students.filter(s => !s.archived).length) h += `<div class="empty">Начните со вкладки «Ученики»: добавьте ученика, его ставку и постоянное время занятий — расписание появится здесь само.</div>`;
   for (let i = 0; i < 7; i++) {
-    const d = addD(weekStart, i), ls = L.concat(G).filter(o => o.date === d).sort((a, b) => a.time.localeCompare(b.time));
+    const d = addD(weekStart, i), ls = L.concat(G).filter(o => o.date === d).concat(S.tasks.filter(x => x.date === d).map(x => ({ task: x, time: x.from || '' }))).sort((a, b) => a.time.localeCompare(b.time));
     h += `<div class="day${d === t ? ' today' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}</div>`;
-    h += ls.length ? ls.map(card).join('') : `<div class="none">нет занятий</div>`;
+    h += ls.length ? ls.map(o => o.task ? taskCard(o.task) : card(o)).join('') : `<div class="none">нет занятий</div>`;
     h += `</div>`;
   }
-  h += `<button class="fab" data-a="newExtra" aria-label="Разовое занятие">+</button>`;
+  h += `<button class="fab" data-a="newAny" aria-label="Добавить">+</button>`;
   return h;
 }
 
@@ -544,6 +562,11 @@ function sLes(ref) {
   h += `<div class="btns"><button class="btn" data-a="lesMoveForm" data-r="${ref}">→ Перенести</button>${o.status === 'cancel' ? '' : `<button class="btn danger" data-a="lesCancel" data-r="${ref}">✕ Отменить</button>`}</div>`;
   if (o.kind === 'slot' && o.moved && o.status !== 'done') h += `<button class="link" data-a="lesRestore" data-r="${ref}">Вернуть на время по расписанию</button>`;
   if (o.kind === 'extra' && o.status !== 'done') h += `<button class="link danger" data-a="lesDel" data-r="${ref}">Удалить это разовое занятие</button>`;
+  const ph = prevHw(o);
+  if (o.topic || o.hw || ph) {
+    h += `<div class="box">${ph && !o.topic ? `<small class="muted">ДЗ с прошлого (${fmtS(ph.date)}): ${esc(ph.hw)}</small><br>` : ''}${o.topic ? `<b>Проходили:</b> ${esc(o.topic)}<br>` : ''}${o.hw ? `<b>ДЗ:</b> ${esc(o.hw)}` : ''}</div>`;
+  }
+  h += `<button class="link" data-a="noteForm" data-r="${ref}">📄 ${o.topic || o.hw ? 'Изменить заметки' : 'Заметки к занятию'}</button>`;
   h += `<button class="link" data-a="openStu" data-id="${s.id}">Карточка ученика ›</button>`;
   return h;
 }
@@ -562,6 +585,34 @@ function sUnmarked() {
   for (const o of un) { if (o.date !== d) { d = o.date; h += `<div class="dh" style="margin-top:12px">${fmtD(d)}</div>`; } h += card(o); }
   h += `<div class="btns"><button class="btn" data-a="allDone">Отметить все как проведённые</button></div>`;
   return h;
+}
+function sNew() {
+  return `<h2>Добавить</h2><div class="choice">
+    <button data-a="newExtra">Занятие с учеником<small>разовое, вне постоянного расписания</small></button>
+    <button data-a="newTask">Дело<small>любое дело в планере: описание, дата и время</small></button></div>`;
+}
+function sTask(id) {
+  const t = id ? S.tasks.find(x => x.id === id) : { text: '', date: weekStart === monday(today()) ? today() : weekStart, from: '', to: '' };
+  if (!t) return null;
+  return `<h2>${id ? 'Дело' : 'Новое дело'}</h2>
+    <label>Описание<textarea id="f_text" rows="2" placeholder="например, проверить пробники Серафима">${esc(t.text)}</textarea></label>
+    <label>Дата<input id="f_date" type="date" value="${t.date}"></label>
+    <div class="two"><label>С<input id="f_from" type="time" value="${t.from || ''}"></label><label>До<input id="f_to" type="time" value="${t.to || ''}"></label></div>
+    <div class="btns"><button class="pri" data-a="saveTask" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>
+    ${id ? `<button class="link danger" data-a="delTask" data-id="${id}">Удалить дело</button>` : ''}`;
+}
+function prevHw(o) {
+  const L = occ(addD(o.date, -120), o.date).filter(x => x.sid === o.sid && x.status !== 'cancel' && (x.date + x.time) < (o.date + o.time) && x.hw);
+  return L.length ? L[L.length - 1] : null;
+}
+function sNote(ref) {
+  const o = getOcc(ref); if (!o) return null;
+  const p = prevHw(o);
+  return `<h2>Заметки к занятию</h2><p class="muted">${esc(stu(o.sid).name)} · ${fmtD(o.date)}, ${o.time}</p>
+    ${p ? `<div class="hwprev"><b>ДЗ с прошлого занятия</b> (${fmtD(p.date)}):<br>${esc(p.hw)}</div>` : ''}
+    <label>Что проходили<textarea id="f_topic" rows="3" placeholder="тема, что разобрали, что не получилось">${esc(o.topic || '')}</textarea></label>
+    <label>Домашнее задание<textarea id="f_hw" rows="3" placeholder="что задано к следующему разу">${esc(o.hw || '')}</textarea></label>
+    <div class="btns"><button class="pri" data-a="saveNote" data-r="${ref}">Сохранить</button></div>`;
 }
 function sExtra() {
   const list = S.students.filter(s => !s.archived).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -606,7 +657,7 @@ function sStu(id) {
   const pays = S.pays.filter(p => p.sid === id).sort((a, b) => b.date.localeCompare(a.date));
   h += `<h3>Оплаты</h3>` + (pays.length ? `<div class="box">${pays.map(p => `<div class="row" data-a="payDel" data-p="${p.id}"><span>${fmtS(p.date)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</span><b>${rub(p.amount)}</b></div>`).join('')}</div><p class="muted" style="font-size:13px">Чтобы удалить ошибочную оплату, нажмите на неё.</p>` : `<div class="empty">Оплат пока не было.</div>`);
   const L = b.lessons.slice(-12).reverse();
-  if (L.length) h += `<h3>Последние проведённые</h3><div class="box">${L.map(l => `<div class="row"><span>${fmtD(l.date)}, ${l.time}</span><small>${rub(l.price)}</small></div>`).join('')}</div>`;
+  if (L.length) h += `<h3>Последние проведённые</h3><div class="box">${L.map(l => `<div class="row"><span>${fmtD(l.date)}, ${l.time}${l.topic ? `<small>${esc(l.topic)}</small>` : ''}</span><small>${rub(l.price)}</small></div>`).join('')}</div>`;
   h += s.archived
     ? `<div class="btns"><button class="btn" data-a="unarch" data-id="${id}">Вернуть из архива</button><button class="btn danger" data-a="delStu" data-id="${id}">Удалить навсегда</button></div>`
     : `<button class="link danger" data-a="arch" data-id="${id}">Перестал заниматься — в архив</button>`;
@@ -715,7 +766,26 @@ const A = {
     for (const o of un) setOcc(getOcc(refOf(o)), { status: 'done', price: stu(o.sid).rate });
     toast('Отмечено', undoTo(u)); refresh();
   },
+  newAny: () => openSheet(sNew),
   newExtra: () => openSheet(sExtra),
+  newTask: () => openSheet(() => sTask(null)),
+  openTask: d => openSheet(() => sTask(d.id)),
+  saveTask: d => {
+    const text = val('f_text'), date = val('f_date'), from = val('f_from'), to = val('f_to');
+    if (!text) return toast('Напишите, что за дело');
+    if (!date) return toast('Укажите дату');
+    if (d.id) Object.assign(S.tasks.find(x => x.id === d.id), { text, date, from, to });
+    else S.tasks.push({ id: uid(), text, date, from, to });
+    save(); closeSheet(); toast(d.id ? 'Сохранено' : 'Дело добавлено'); refresh();
+  },
+  delTask: d => { const u = snap(); S.tasks = S.tasks.filter(x => x.id !== d.id); save(); closeSheet(); toast('Дело удалено', undoTo(u)); refresh(); },
+  taskDone: d => { const t = S.tasks.find(x => x.id === d.id); if (!t) return; t.done = !t.done; save(); refresh(); },
+  noteForm: d => openSheet(() => sNote(d.r)),
+  saveNote: d => {
+    const o = getOcc(d.r); if (!o) return;
+    setOcc(o, { topic: val('f_topic') || undefined, hw: val('f_hw') || undefined });
+    closeSheet(); toast('Заметки сохранены'); refresh();
+  },
   saveExtra: () => {
     const sid = val('f_sid'), date = val('f_date'), time = val('f_time'), dur = +val('f_dur') || 60;
     if (!sid || !date || !time) return toast('Заполните дату и время');
