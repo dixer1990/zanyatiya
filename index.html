@@ -20,6 +20,9 @@ html,body{margin:0}
 body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
 button{font:inherit;color:inherit;cursor:pointer}
 header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 8px;font-weight:700;font-size:21px;max-width:560px;margin:0 auto}
+@keyframes inL{from{transform:translateX(-36px);opacity:.3}to{transform:none;opacity:1}}
+@keyframes inR{from{transform:translateX(36px);opacity:.3}to{transform:none;opacity:1}}
+main.inL{animation:inL .22s ease-out}main.inR{animation:inR .22s ease-out}
 main{max-width:560px;margin:0 auto;padding:0 12px calc(96px + env(safe-area-inset-bottom))}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav .in{display:flex;width:100%;max-width:560px}
@@ -145,7 +148,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.6 · 7 ноября 2026';
+const VERSION = '1.7 · 7 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -647,7 +650,7 @@ const A = {
   tab: d => { tab = d.t; window.scrollTo(0, 0); render(); },
   close: () => closeSheet(),
   undo: () => { if (UNDO) { const u = UNDO; UNDO = null; u(); } },
-  wk: d => { weekStart = addD(weekStart, +d.d); render(); },
+  wk: d => goWeek(+d.d / 7),
   wkToday: () => { weekStart = monday(today()); render(); },
   mon: d => { const [y, m] = moneyMonth.split('-').map(Number); const n = new Date(y, m - 1 + (+d.d), 1); moneyMonth = ymd(n).slice(0, 7); render(); },
   monToday: () => { moneyMonth = today().slice(0, 7); render(); },
@@ -815,6 +818,25 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-a]'); if (!t) return;
   const f = A[t.dataset.a]; if (f) { e.preventDefault(); f(t.dataset, t, e); }
 });
+/* листание недель свайпом влево-вправо */
+function goWeek(dir) {
+  weekStart = addD(weekStart, 7 * dir); render();
+  const v = $('#view'); v.classList.remove('inL', 'inR'); void v.offsetWidth; v.classList.add(dir > 0 ? 'inR' : 'inL');
+}
+let sw = null;
+$('#view').addEventListener('touchstart', e => {
+  if (tab !== 'sched' || sheetFn || e.touches.length !== 1) { sw = null; return; }
+  const t = e.touches[0];
+  // у самых краёв экрана — системный жест «назад», его не трогаем
+  if (t.clientX < 24 || t.clientX > window.innerWidth - 24) { sw = null; return; }
+  sw = { x: t.clientX, y: t.clientY, t: Date.now() };
+}, { passive: true });
+$('#view').addEventListener('touchend', e => {
+  if (!sw) return;
+  const t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y, dt = Date.now() - sw.t;
+  sw = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > 1.8 * Math.abs(dy) && dt < 700) goWeek(dx < 0 ? 1 : -1);
+}, { passive: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; if (tab === 'more') render(); });
 
