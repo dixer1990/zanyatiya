@@ -64,6 +64,11 @@ nav button.on{color:var(--acc);font-weight:600}
 .ic.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 .ic.x{background:#e9e6df;border-color:#e9e6df;color:#8a857c}
 .ic.mv{background:var(--accb);border-color:var(--accb);color:var(--acc)}
+.icw{display:flex;flex-direction:column;align-items:center;width:38px;flex:none}
+.icw .ic{width:32px;height:32px}
+.icw .ic svg{width:17px;height:17px}
+.icw small{font-size:9.5px;line-height:1.15;color:var(--acc);text-align:center;white-space:nowrap;margin-top:1px;display:block}
+.ic.ph{visibility:hidden}
 .ic.rub.owe{border-color:var(--bad);color:var(--bad)}
 .ic.rub.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--bad);margin-left:6px;vertical-align:middle}
@@ -140,7 +145,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.5 · 7 ноября 2026';
+const VERSION = '1.6 · 7 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -357,14 +362,15 @@ function card(o) {
   const s = stu(o.sid), past = isPast(o), ref = refOf(o);
   if (o.ghost) {   // старое место перенесённого занятия
     return `<div class="les ghost" data-a="openLes" data-r="${ref}"><div class="tm">${o.time}</div>
-      <div class="mid"><b>${esc(s.name)}</b><small>перенесено на ${fmtD(o.to)}, ${o.toTime}</small></div><span class="ic mv">${ICON.move}</span></div>`;
+      <div class="mid"><b>${esc(s.name)}</b><small>перенесено</small></div>
+      <div class="acts"><div class="icw"><span class="ic mv">${ICON.move}</span><small>${WD[wdOf(o.to) - 1]} ${fmtS(o.to)}<br>${o.toTime}</small></div><span class="ic ph"></span></div></div>`;
   }
   const cls = o.status || (past ? 'due' : 'plan');
   const sub = [`до ${endT(o.time, o.dur)}`];
   if (o.moved) sub.push(o.date !== o.orig ? `перенесено с ${WD[wdOf(o.orig) - 1]}` : 'время изменено');
   if (o.kind === 'extra') sub.push('разовое');
   let right;
-  if (o.status === 'cancel') right = `<span class="ic x">${ICON.x}</span>`;
+  if (o.status === 'cancel') right = `<div class="acts"><span class="ic x">${ICON.x}</span><span class="ic ph"></span></div>`;
   else {
     const isPaid = cov(o.sid).paid.has(ref);
     const rubBtn = `<button class="ic rub${isPaid ? ' ok' : o.status === 'done' ? ' owe' : ''}" data-a="quickPay" data-r="${ref}" aria-label="${isPaid ? 'Оплачено' : 'Записать оплату'}">${ICON.rub}</button>`;
@@ -526,13 +532,13 @@ function sLes(ref) {
   if (o.kind === 'slot' && o.moved) h += `<p class="note">Перенесено. По расписанию было: ${fmtD(o.orig)}, ${slotById(o.slotId).time}</p>`;
   if (!o.status) {
     h += `<label>Цена занятия, ₽<input id="f_price" type="number" inputmode="numeric" value="${s.rate}"></label>
-      <div class="btns"><button class="pri" data-a="lesDone" data-r="${ref}">✓ Провёл</button></div>
-      <div class="btns"><button class="btn" data-a="lesMoveForm" data-r="${ref}">Перенести</button><button class="btn danger" data-a="lesCancel" data-r="${ref}">Отменить</button></div>`;
+      <div class="btns"><button class="pri" data-a="lesDone" data-r="${ref}">✓ Провёл</button></div>`;
   } else if (o.status === 'done') {
     h += `<p class="state ok">✓ Проведено · ${rub(o.price)}</p><div class="btns"><button class="btn" data-a="lesUndo" data-r="${ref}">Снять отметку</button></div>`;
   } else {
-    h += `<p class="state off">Отменено</p><div class="btns"><button class="btn" data-a="lesUndo" data-r="${ref}">Вернуть в расписание</button></div>`;
+    h += `<p class="state off">✕ Отменено</p><div class="btns"><button class="btn" data-a="lesUndo" data-r="${ref}">Вернуть в расписание</button></div>`;
   }
+  h += `<div class="btns"><button class="btn" data-a="lesMoveForm" data-r="${ref}">→ Перенести</button>${o.status === 'cancel' ? '' : `<button class="btn danger" data-a="lesCancel" data-r="${ref}">✕ Отменить</button>`}</div>`;
   if (o.kind === 'slot' && o.moved && o.status !== 'done') h += `<button class="link" data-a="lesRestore" data-r="${ref}">Вернуть на время по расписанию</button>`;
   if (o.kind === 'extra' && o.status !== 'done') h += `<button class="link danger" data-a="lesDel" data-r="${ref}">Удалить это разовое занятие</button>`;
   h += `<button class="link" data-a="openStu" data-id="${s.id}">Карточка ученика ›</button>`;
@@ -692,9 +698,8 @@ const A = {
     const o = getOcc(d.r), date = val('f_date'), time = val('f_time');
     if (!date || !time) return toast('Укажите дату и время');
     const u = snap();
-    setOcc(o, { date, time });
-    closeSheet(); toast(`Перенесено на ${fmtD(date)}, ${time}`, undoTo(u));
-    weekStart = monday(date); refresh();
+    setOcc(o, o.status === 'cancel' ? { date, time, status: undefined } : { date, time });
+    closeSheet(); toast(`Перенесено на ${fmtD(date)}, ${time}`, undoTo(u)); refresh();
   },
   lesRestore: d => { const o = getOcc(d.r); setOcc(o, { date: undefined, time: undefined }); closeSheet(); toast('Возвращено на время по расписанию'); refresh(); },
   lesDel: d => {
