@@ -82,6 +82,9 @@ nav button.on{color:var(--acc);font-weight:600}
 .stats small{display:block;color:var(--mut);font-size:13px}
 .stats b{font-size:20px}
 .neg{color:var(--bad)}
+.paid{color:var(--ok);font-weight:600}.unp{color:var(--bad);font-weight:600}
+label.check{display:flex;align-items:flex-start;gap:10px;color:var(--ink);font-size:15px}
+label.check input{width:auto;margin:3px 0 0;transform:scale(1.3);flex:none}
 h2{margin:0 40px 4px 0;font-size:21px}
 h3{font-size:14px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);margin:18px 0 6px}
 .muted{color:var(--mut);margin:0 0 8px}
@@ -126,7 +129,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.2 · 7 ноября 2026';
+const VERSION = '1.3 · 7 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -255,11 +258,52 @@ function bal(sid) {
   const ahead = balance > 0 && s && s.rate > 0 ? Math.floor(balance / s.rate) : 0;
   return (BAL[sid] = { paid, cost, count: L.length, balance, unpaid, ahead, lessons: L });
 }
-function badge(b) {
+/* Раскладка оплат по занятиям: деньги по порядку покрывают проведённые и будущие занятия (отменённые не считаются).
+   Так предоплата «за месяц» сама отмечает, какие занятия уже оплачены и когда оплата заканчивается. */
+let COV = {};
+function cov(sid) {
+  if (COV[sid]) return COV[sid];
+  const s = stu(sid), t = today();
+  let from = t;
+  for (const sl of S.slots) if (sl.sid === sid && sl.from < from) from = sl.from;
+  for (const e of S.extra) if (e.sid === sid && e.date < from) from = e.date;
+  for (const k in S.ov) {
+    const [slid, orig] = k.split('|'), sl = slotById(slid);
+    if (sl && sl.sid === sid) { const d = S.ov[k].date || orig; if (d < from) from = d; if (orig < from) from = orig; }
+  }
+  const L = occ(from, addD(t, 200)).filter(o => o.sid === sid && o.status !== 'cancel');
+  let rest = S.pays.filter(p => p.sid === sid).reduce((a, p) => a + (+p.amount || 0), 0);
+  const paid = new Set(); let open = true, leftover = 0, aheadPaid = 0, lastPaidFuture = null, nextUnpaidFuture = null;
+  for (const o of L) {
+    const price = o.status === 'done' ? (+o.price || 0) : (+s.rate || 0);
+    const future = o.status !== 'done' && !isPast(o);
+    if (open && rest >= price) {
+      rest -= price; paid.add(refOf(o));
+      if (future) { aheadPaid++; lastPaidFuture = o; }
+    } else {
+      if (open) { leftover = rest; open = false; }
+      if (future && !nextUnpaidFuture) nextUnpaidFuture = o;
+    }
+  }
+  if (open) leftover = rest;
+  return (COV[sid] = { paid, aheadPaid, lastPaidFuture, nextUnpaidFuture, leftover });
+}
+function badge(b, sid) {
   if (b.unpaid >= S.limit) return `<span class="chip bad">не оплачено: ${b.unpaid}</span>`;
   if (b.unpaid > 0) return `<span class="chip warn">не оплачено: ${b.unpaid}</span>`;
-  if (b.balance > 0) return `<span class="chip ok">аванс: ${b.ahead ? b.ahead + ' зан.' : rub(b.balance)}</span>`;
+  const c = sid ? cov(sid) : null;
+  if (c && c.aheadPaid > 0) return `<span class="chip ok">оплачено ещё ${c.aheadPaid} ${lessonsWord(c.aheadPaid)}</span>`;
+  if (b.balance > 0) return `<span class="chip ok">аванс: ${rub(b.balance)}</span>`;
   return `<span class="chip">в расчёте</span>`;
+}
+// напоминание, что оплаченные наперёд занятия заканчиваются
+function remindText(s) {
+  if (!s.remind || s.archived) return '';
+  const b = bal(s.id); if (b.unpaid >= S.limit) return '';
+  const c = cov(s.id);
+  if (!c.nextUnpaidFuture || c.aheadPaid > 1) return '';
+  if (c.aheadPaid === 1) return `${esc(s.name)}: осталось последнее оплаченное занятие (${fmtD(c.lastPaidFuture.date)}) — пора напомнить об оплате`;
+  return `${esc(s.name)}: оплаченные занятия закончились — следующее (${fmtD(c.nextUnpaidFuture.date)}) не оплачено`;
 }
 const activeSlots = sid => S.slots.filter(x => x.sid === sid && (!x.to || x.to >= today()) && x.to !== addD(x.from, -1))
   .sort((a, b) => (a.wd + a.time).localeCompare(b.wd + b.time));
@@ -291,6 +335,10 @@ function card(o) {
   const sub = [`до ${endT(o.time, o.dur)}`];
   if (o.moved) sub.push('перенесено');
   if (o.kind === 'extra') sub.push('разовое');
+  if (o.status !== 'cancel') {
+    if (cov(o.sid).paid.has(refOf(o))) sub.push('<span class="paid">оплачено</span>');
+    else if (o.status === 'done') sub.push('<span class="unp">не оплачено</span>');
+  }
   let right = '';
   if (o.status === 'done') right = `<span class="chip ok">✓ проведено</span>`;
   else if (o.status === 'cancel') right = `<span class="chip off">отмена</span>`;
@@ -309,6 +357,7 @@ function vSched() {
     const b = bal(s.id);
     if (b.unpaid >= S.limit) h += `<div class="banner bad" data-a="openStu" data-id="${s.id}">${esc(s.name)}: не оплачено ${b.unpaid} ${lessonsWord(b.unpaid)}${b.unpaid > S.limit ? ' — больше предела' : ' — это предел'}<span>›</span></div>`;
   }
+  for (const s of S.students) { const r = remindText(s); if (r) h += `<div class="banner warn" data-a="openStu" data-id="${s.id}">${r}<span>›</span></div>`; }
   h += backupBanner();
   const ws = pd(weekStart), wee = pd(we);
   const title = ws.getMonth() === wee.getMonth() ? `${ws.getDate()}–${wee.getDate()} ${MG[ws.getMonth()]}` : `${ws.getDate()} ${MG[ws.getMonth()]} – ${wee.getDate()} ${MG[wee.getMonth()]}`;
@@ -337,7 +386,7 @@ function vStu() {
     <button class="link" data-a="toggleArch">${showArchive ? '← к активным' : 'Архив'}</button></div>`;
   if (!list.length) h += `<div class="empty">${showArchive ? 'В архиве пусто.' : 'Пока нет учеников. Нажмите «+ Ученик».'}</div>`;
   for (const s of list) h += `<div class="stu" data-a="openStu" data-id="${s.id}"><div><b>${esc(s.name)}</b>
-    <small>${rub(s.rate)} · ${showArchive ? 'в архиве' : slotsText(s.id)}</small></div>${badge(bal(s.id))}</div>`;
+    <small>${rub(s.rate)} · ${showArchive ? 'в архиве' : slotsText(s.id)}</small></div>${badge(bal(s.id), s.id)}</div>`;
   return h;
 }
 
@@ -361,7 +410,7 @@ function vMoney() {
   const debt = S.students.filter(s => !s.archived && bal(s.id).unpaid > 0);
   if (debt.length) {
     h += `<h3>Есть неоплаченные занятия</h3><div class="box">`;
-    for (const s of debt) { const b = bal(s.id); h += `<div class="row" data-a="openStu" data-id="${s.id}"><span>${esc(s.name)}</span><span>${badge(b)} <small>${rub(-b.balance)}</small></span></div>`; }
+    for (const s of debt) { const b = bal(s.id); h += `<div class="row" data-a="openStu" data-id="${s.id}"><span>${esc(s.name)}</span><span>${badge(b, s.id)} <small>${rub(-b.balance)}</small></span></div>`; }
     h += `</div>`;
   }
   h += `<h3>Оплаты за месяц</h3>`;
@@ -389,7 +438,7 @@ function vMore() {
 const VIEWS = { sched: vSched, stu: vStu, money: vMoney, more: vMore };
 const TITLES = { sched: 'Расписание', stu: 'Ученики', money: 'Деньги', more: 'Ещё' };
 function render() {
-  BAL = {};
+  BAL = {}; COV = {};
   $('#title').textContent = TITLES[tab];
   $('#view').innerHTML = VIEWS[tab]();
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
@@ -414,7 +463,7 @@ function drawSheet() {
 function hideSheet() { sheetFn = null; document.body.classList.remove('sheet-open'); $('#panel').innerHTML = ''; }
 function closeSheet() { if (!sheetFn) return; if (history.state && history.state.sh) history.back(); else hideSheet(); }
 window.addEventListener('popstate', hideSheet);
-function refresh() { BAL = {}; render(); drawSheet(); }
+function refresh() { BAL = {}; COV = {}; render(); drawSheet(); }
 
 let toastT;
 function toast(msg, undo) {
@@ -430,7 +479,8 @@ const undoTo = s => () => { S = fix(JSON.parse(s)); save(); refresh(); toast('О
 function sLes(ref) {
   const o = getOcc(ref); if (!o) return null;
   const s = stu(o.sid);
-  let h = `<h2>${esc(s.name)}</h2><p class="muted">${fmtD(o.date)} · ${o.time}–${endT(o.time, o.dur)}${o.kind === 'extra' ? ' · разовое' : ''}</p>`;
+  const pd_ = o.status !== 'cancel' && cov(o.sid).paid.has(ref);
+  let h = `<h2>${esc(s.name)}</h2><p class="muted">${fmtD(o.date)} · ${o.time}–${endT(o.time, o.dur)}${o.kind === 'extra' ? ' · разовое' : ''}${o.status === 'cancel' ? '' : pd_ ? ' · <span class="paid">оплачено</span>' : ' · <span class="unp">не оплачено</span>'}</p>`;
   if (o.kind === 'slot' && o.moved) h += `<p class="note">Перенесено. По расписанию было: ${fmtD(o.orig)}, ${slotById(o.slotId).time}</p>`;
   if (!o.status) {
     h += `<label>Цена занятия, ₽<input id="f_price" type="number" inputmode="numeric" value="${s.rate}"></label>
@@ -478,6 +528,7 @@ function sStuForm(id) {
     <label>Имя<input id="f_name" value="${esc(s.name)}" placeholder="Например, Маша (ОГЭ)"></label>
     <label>Цена одного занятия, ₽<input id="f_rate" type="number" inputmode="numeric" value="${esc(s.rate)}"></label>
     <label>Заметка (необязательно)<input id="f_note" value="${esc(s.note)}" placeholder="контакт родителя, класс, цель…"></label>
+    <label class="check"><input id="f_remind" type="checkbox"${s.remind ? ' checked' : ''}>Платит наперёд — предупреждать, когда оплаченные занятия заканчиваются</label>
     ${id ? '<p class="muted" style="font-size:13px">Новая цена действует для занятий, которые вы отметите дальше. Уже проведённые остаются по старой.</p>' : ''}
     <div class="btns"><button class="pri" data-a="saveStu" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>`;
 }
@@ -485,13 +536,19 @@ function sStu(id) {
   const s = stu(id); if (!s) return null;
   const b = bal(id);
   let h = `<h2>${esc(s.name)}</h2><p class="muted">${rub(s.rate)} за занятие${s.note ? ' · ' + esc(s.note) : ''}</p>
-    <div>${badge(b)}</div>
+    <div>${badge(b, id)}</div>
     <div class="stats">
       <div><small>Всего оплачено</small><b>${rub(b.paid)}</b></div>
       <div><small>Проведено занятий</small><b>${b.count}</b><small>на ${rub(b.cost)}</small></div>
     </div>
-    <div class="box" style="margin-top:0">${b.balance < 0 ? `Долг: <b class="neg">${rub(-b.balance)}</b> (${b.unpaid} ${lessonsWord(b.unpaid)})`
-      : b.balance > 0 ? `Оплачено вперёд: <b>${rub(b.balance)}</b>${b.ahead ? ` — примерно ${b.ahead} ${lessonsWord(b.ahead)}` : ''}` : 'Всё оплачено, долга и аванса нет.'}</div>`;
+    <div class="box" style="margin-top:0">${(() => {
+      const c = cov(id); let t = '';
+      if (b.balance < 0) t += `Долг: <b class="neg">${rub(-b.balance)}</b> (${b.unpaid} ${lessonsWord(b.unpaid)})<br>`;
+      if (c.aheadPaid) t += `Оплачено вперёд <b>${c.aheadPaid} ${lessonsWord(c.aheadPaid)}</b> — до ${fmtD(c.lastPaidFuture.date)} включительно<br>`;
+      if (c.nextUnpaidFuture) t += `Первое неоплаченное: ${fmtD(c.nextUnpaidFuture.date)}<br>`;
+      if (c.leftover > 0 && c.nextUnpaidFuture) t += `<small class="muted">Остаток ${rub(c.leftover)} пойдёт в счёт следующего занятия</small>`;
+      return t || 'Всё оплачено, долга и аванса нет.';
+    })()}</div>`;
   if (!s.archived) h += `<div class="btns"><button class="pri" data-a="payForm" data-id="${id}">+ Оплата</button><button class="btn" data-a="editStu" data-id="${id}">Изменить</button></div>
     <h3>Постоянное расписание</h3><div class="box">${activeSlots(id).map(x => `<div class="row" data-a="slotForm" data-id="${id}" data-slot="${x.id}"><span>${WDF[x.wd - 1]}, ${x.time}–${endT(x.time, x.dur)}</span><small>${x.from > today() ? 'с ' + fmtS(x.from) : ''}${x.to ? ' до ' + fmtS(x.to) : ''} ›</small></div>`).join('') || '<p class="muted" style="margin:0">Постоянного времени нет.</p>'}
     <button class="link" data-a="slotForm" data-id="${id}">+ Добавить время</button></div>`;
@@ -515,12 +572,18 @@ function sSlot(id, slotId) {
     <div class="btns"><button class="pri" data-a="saveSlot" data-id="${id}" data-slot="${slotId || ''}">Сохранить</button></div>
     ${slotId ? `<button class="link danger" data-a="delSlot" data-id="${id}" data-slot="${slotId}">Убрать это время из расписания (с указанной даты)</button>` : ''}`;
 }
+function monthPlan(sid, ym) {
+  const [y, m] = ym.split('-').map(Number), L = occ(ym + '-01', ymd(new Date(y, m, 0))).filter(o => o.sid === sid && o.status !== 'cancel');
+  return { n: L.length, sum: L.reduce((a, o) => a + (o.status === 'done' ? (+o.price || 0) : (+stu(sid).rate || 0)), 0), name: MN[m - 1].toLowerCase() };
+}
 function sPay(id) {
   const s = stu(id), b = bal(id);
   const sug = b.balance < 0 ? -b.balance : s.rate;
+  const ym0 = today().slice(0, 7), d1 = pd(ym0 + '-01'); d1.setMonth(d1.getMonth() + 1);
+  const months = [ym0, ymd(d1).slice(0, 7)].map(ym => monthPlan(id, ym)).filter(x => x.n);
   return `<h2>Оплата</h2><p class="muted">${esc(s.name)}${b.balance < 0 ? ` · долг ${rub(-b.balance)}` : ''}</p>
     <label>Сумма, ₽<input id="f_amt" type="number" inputmode="numeric" value="${sug || ''}"></label>
-    <div class="quick">${b.balance < 0 ? `<button data-a="payQuick" data-v="${-b.balance}">весь долг</button>` : ''}${[1, 4, 8].map(n => `<button data-a="payQuick" data-v="${n * s.rate}">${n} ${lessonsWord(n)}</button>`).join('')}</div>
+    <div class="quick">${b.balance < 0 ? `<button data-a="payQuick" data-v="${-b.balance}">весь долг</button>` : ''}${months.map(x => `<button data-a="payQuick" data-v="${x.sum}" data-note="за ${x.name}">за ${x.name} · ${x.n} ${lessonsWord(x.n)}</button>`).join('')}${[1, 4, 8].map(n => `<button data-a="payQuick" data-v="${n * s.rate}">${n} ${lessonsWord(n)}</button>`).join('')}</div>
     <label>Дата<input id="f_date" type="date" value="${today()}"></label>
     <label>Заметка (необязательно)<input id="f_note" placeholder="например, пакет на ноябрь"></label>
     <div class="btns"><button class="pri" data-a="savePay" data-id="${id}">Записать оплату</button></div>`;
@@ -528,7 +591,7 @@ function sPay(id) {
 
 /* ---------- действия ---------- */
 function afterDone(sid, name) {
-  BAL = {};
+  BAL = {}; COV = {};
   const b = bal(sid);
   return b.unpaid > S.limit ? ` ⚠ не оплачено уже ${b.unpaid}` : b.unpaid === S.limit ? ` · не оплачено ${b.unpaid} — предел` : '';
 }
@@ -594,11 +657,11 @@ const A = {
   newStu: () => openSheet(() => sStuForm(null)),
   editStu: d => openSheet(() => sStuForm(d.id)),
   saveStu: d => {
-    const name = val('f_name'), rate = +val('f_rate'), note = val('f_note');
+    const name = val('f_name'), rate = +val('f_rate'), note = val('f_note'), remind = !!document.getElementById('f_remind')?.checked;
     if (!name) return toast('Введите имя');
     if (!(rate >= 0)) return toast('Проверьте цену');
-    if (d.id) { Object.assign(stu(d.id), { name, rate, note }); save(); openSheet(() => sStu(d.id)); }
-    else { const id = uid(); S.students.push({ id, name, rate, note }); save(); openSheet(() => sSlot(id, null)); toast('Ученик добавлен. Теперь укажите постоянное время'); }
+    if (d.id) { Object.assign(stu(d.id), { name, rate, note, remind }); save(); openSheet(() => sStu(d.id)); }
+    else { const id = uid(); S.students.push({ id, name, rate, note, remind: remind || undefined }); save(); openSheet(() => sSlot(id, null)); toast('Ученик добавлен. Теперь укажите постоянное время'); }
     refresh();
   },
   slotForm: d => openSheet(() => sSlot(d.id, d.slot || null)),
@@ -619,13 +682,16 @@ const A = {
     endSlot(slotById(d.slot), from); save(); openSheet(() => sStu(d.id)); refresh();
   },
   payForm: d => openSheet(() => sPay(d.id)),
-  payQuick: d => { $('#f_amt').value = d.v; },
+  payQuick: d => { $('#f_amt').value = d.v; if (d.note) $('#f_note').value = d.note; },
   savePay: d => {
     const amount = +val('f_amt'), date = val('f_date') || today(), note = val('f_note');
     if (!(amount > 0)) return toast('Введите сумму');
     const u = snap();
-    S.pays.push({ id: uid(), sid: d.id, date, amount, note }); save();
-    openSheet(() => sStu(d.id)); toast(`Оплата ${rub(amount)} записана`, undoTo(u)); refresh();
+    S.pays.push({ id: uid(), sid: d.id, date, amount, note });
+    const s = stu(d.id); let extra = '';
+    if (s.remind === undefined && s.rate > 0 && amount >= 2 * s.rate) { s.remind = true; extra = '. Напомню, когда оплаченные занятия закончатся'; }
+    save();
+    openSheet(() => sStu(d.id)); toast(`Оплата ${rub(amount)} записана${extra}`, undoTo(u)); refresh();
   },
   payDel: d => {
     const p = S.pays.find(x => x.id === d.p);
