@@ -45,17 +45,25 @@ nav button.on{color:var(--acc);font-weight:600}
 .day.today .dh{color:var(--acc);font-weight:700}
 .none{color:#aaa;font-size:14px;margin:0 4px}
 
-.les{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px;margin-bottom:6px;min-height:58px;border-left:4px solid var(--acc)}
-.les .tm{font-weight:700;font-variant-numeric:tabular-nums;width:46px}
+.les{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:12px;padding:6px 6px 6px 10px;margin-bottom:5px;min-height:48px;border-left:4px solid var(--acc);font-size:15px}
+.les .tm{font-weight:700;font-variant-numeric:tabular-nums;width:42px;font-size:14px}
 .les .mid{flex:1;min-width:0}
 .les .mid b{font-weight:600}
-.les small,.stu small{display:block;color:var(--mut);font-size:13px}
+.les small{display:block;color:var(--mut);font-size:12px;line-height:1.3}
+.stu small{display:block;color:var(--mut);font-size:13px}
 .les.done{border-left-color:var(--ok)}
 .les.cancel{border-left-color:#bbb;opacity:.6}
 .les.cancel b{text-decoration:line-through}
 .les.due{border-left-color:var(--warn)}
+.les.ghost{background:transparent;border:1px dashed #cfcac0;border-left:4px solid #cfcac0;opacity:.8}
+.les.ghost b{font-weight:500;color:var(--mut)}
+.ic{width:38px;height:38px;border-radius:19px;flex:none;display:flex;align-items:center;justify-content:center;border:2px solid var(--line);background:#fff;color:#b9b4aa;padding:0}
+.ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.ic.due{border-color:var(--ok);color:var(--ok)}
+.ic.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.ic.x{background:#e9e6df;border-color:#e9e6df;color:#8a857c}
+.ic.mv{background:var(--accb);border-color:var(--accb);color:var(--acc)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--bad);margin-left:6px;vertical-align:middle}
-.chk{width:44px;height:44px;border-radius:22px;border:2px solid var(--ok);background:#fff;color:var(--ok);font-size:20px;font-weight:700;flex:none}
 
 .chip{display:inline-block;font-size:13px;padding:3px 9px;border-radius:20px;background:#eee;color:var(--mut);white-space:nowrap}
 .chip.ok{background:var(--okb);color:var(--ok)}
@@ -129,7 +137,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.3 · 7 ноября 2026';
+const VERSION = '1.4 · 7 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -329,27 +337,48 @@ function backupBanner() {
   return `<div class="banner info" data-a="export">${days === null ? 'Копия данных ещё не сохранялась' : `Копия данных не сохранялась ${days} дн.`} — сохранить <span>›</span></div>`;
 }
 
+const ICON = {
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+  move: '<svg viewBox="0 0 24 24"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg>'
+};
 function card(o) {
-  const s = stu(o.sid), past = isPast(o);
+  const s = stu(o.sid), past = isPast(o), ref = refOf(o);
+  if (o.ghost) {   // старое место перенесённого занятия
+    return `<div class="les ghost" data-a="openLes" data-r="${ref}"><div class="tm">${o.time}</div>
+      <div class="mid"><b>${esc(s.name)}</b><small>перенесено на ${fmtD(o.to)}, ${o.toTime}</small></div><span class="ic mv">${ICON.move}</span></div>`;
+  }
   const cls = o.status || (past ? 'due' : 'plan');
   const sub = [`до ${endT(o.time, o.dur)}`];
-  if (o.moved) sub.push('перенесено');
+  if (o.moved) sub.push(o.date !== o.orig ? `перенесено с ${WD[wdOf(o.orig) - 1]}` : 'время изменено');
   if (o.kind === 'extra') sub.push('разовое');
   if (o.status !== 'cancel') {
-    if (cov(o.sid).paid.has(refOf(o))) sub.push('<span class="paid">оплачено</span>');
+    if (cov(o.sid).paid.has(ref)) sub.push('<span class="paid">оплачено</span>');
     else if (o.status === 'done') sub.push('<span class="unp">не оплачено</span>');
   }
-  let right = '';
-  if (o.status === 'done') right = `<span class="chip ok">✓ проведено</span>`;
-  else if (o.status === 'cancel') right = `<span class="chip off">отмена</span>`;
-  else if (past) right = `<button class="chk" data-a="quickDone" data-r="${refOf(o)}" aria-label="Провёл">✓</button>`;
+  let right;
+  if (o.status === 'done') right = `<button class="ic ok" data-a="quickUndo" data-r="${ref}" aria-label="Снять отметку">${ICON.check}</button>`;
+  else if (o.status === 'cancel') right = `<span class="ic x">${ICON.x}</span>`;
+  else right = `<button class="ic${past ? ' due' : ''}" data-a="quickDone" data-r="${ref}" aria-label="Провёл">${ICON.check}</button>`;
   const dot = bal(o.sid).unpaid >= S.limit ? '<i class="dot"></i>' : '';
-  return `<div class="les ${cls}" data-a="openLes" data-r="${refOf(o)}"><div class="tm">${o.time}</div>
+  return `<div class="les ${cls}" data-a="openLes" data-r="${ref}"><div class="tm">${o.time}</div>
     <div class="mid"><b>${esc(s.name)}</b>${dot}<small>${sub.join(' · ')}</small></div>${right}</div>`;
+}
+// бледные плитки на старом месте перенесённых занятий
+function ghosts(from, to) {
+  const out = [];
+  for (const key in S.ov) {
+    const o = S.ov[key]; if (!o.date) continue;
+    const [slid, orig] = key.split('|');
+    if (o.date === orig || orig < from || orig > to) continue;
+    const sl = slotById(slid); if (!sl || !stu(sl.sid)) continue;
+    out.push({ ghost: true, kind: 'slot', key, sid: sl.sid, date: orig, time: sl.time, to: o.date, toTime: o.time || sl.time });
+  }
+  return out;
 }
 
 function vSched() {
-  const t = today(), we = addD(weekStart, 6), L = occ(weekStart, we);
+  const t = today(), we = addD(weekStart, 6), L = occ(weekStart, we), G = ghosts(weekStart, we);
   let h = '';
   const un = unmarked();
   if (un.length) h += `<div class="banner warn" data-a="openUnmarked">Не отмечено прошедших занятий: <b>${un.length}</b><span>›</span></div>`;
@@ -367,7 +396,7 @@ function vSched() {
     <button class="nav" data-a="wk" data-d="7" aria-label="Следующая неделя">›</button></div>`;
   if (!S.students.filter(s => !s.archived).length) h += `<div class="empty">Начните со вкладки «Ученики»: добавьте ученика, его ставку и постоянное время занятий — расписание появится здесь само.</div>`;
   for (let i = 0; i < 7; i++) {
-    const d = addD(weekStart, i), ls = L.filter(o => o.date === d);
+    const d = addD(weekStart, i), ls = L.concat(G).filter(o => o.date === d).sort((a, b) => a.time.localeCompare(b.time));
     h += `<div class="day${d === t ? ' today' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}</div>`;
     h += ls.length ? ls.map(card).join('') : `<div class="none">нет занятий</div>`;
     h += `</div>`;
@@ -613,6 +642,11 @@ const A = {
     const o = getOcc(d.r); if (!o) return; const s = stu(o.sid), u = snap();
     setOcc(o, { status: 'done', price: s.rate });
     toast(`✓ ${s.name}${afterDone(o.sid)}`, undoTo(u)); refresh();
+  },
+  quickUndo: d => {
+    const o = getOcc(d.r); if (!o) return; const u = snap();
+    setOcc(o, { status: undefined, price: undefined });
+    toast(`Отметка снята: ${stu(o.sid).name}`, undoTo(u)); refresh();
   },
   lesDone: d => {
     const o = getOcc(d.r), s = stu(o.sid), u = snap();
