@@ -103,6 +103,7 @@ textarea{resize:vertical;min-height:70px}
 .chip.ok{background:var(--okb);color:var(--ok)}
 .chip.warn{background:var(--warnb);color:var(--warn)}
 .chip.bad{background:var(--badb);color:var(--bad)}
+.chip.new{background:var(--accb);color:var(--acc);font-size:11px;padding:1px 7px;vertical-align:2px}
 .chip.off{background:var(--chip);color:var(--off)}
 
 .fab{position:fixed;right:max(16px,calc(50% - 264px));bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:28px;border:0;background:var(--acc);color:var(--onacc);font-size:30px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:6}
@@ -171,7 +172,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.10 · 8 ноября 2026';
+const VERSION = '1.11 · 8 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -196,6 +197,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const $ = s => document.querySelector(s);
 const val = id => (document.getElementById(id)?.value ?? '').trim();
+const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? one : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? few : many; };
+const isNew = s => s.since && s.since <= today() && daysBetween(s.since, today()) < 30;
 const lessonsWord = n => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'занятие' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'занятия' : 'занятий'; };
 
 /* ---------- данные ---------- */
@@ -478,8 +481,15 @@ function vStu() {
   const list = S.students.filter(s => !!s.archived === showArchive).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   let h = `<div class="toolbar">${showArchive ? '<b>Архив</b>' : `<button class="pri" data-a="newStu">+ Ученик</button>`}
     <button class="link" data-a="toggleArch">${showArchive ? '← к активным' : 'Архив'}</button></div>`;
+  if (!showArchive) {
+    const act = S.students.filter(s => !s.archived), arch = S.students.length - act.length;
+    const ym = today().slice(0, 7), newM = act.filter(s => s.since && s.since.startsWith(ym)).length;
+    if (act.length) h += `<div class="stats" style="margin-top:0">
+      <div><small>Всего учеников</small><b>${act.length}</b>${arch ? `<small>и ${arch} в архиве</small>` : ''}</div>
+      <div><small>Новых в ${MN[+ym.slice(5) - 1].toLowerCase().replace(/ь$/, 'е').replace(/й$/, 'е').replace(/т$/, 'те')}</small><b>${newM}</b></div></div>`;
+  }
   if (!list.length) h += `<div class="empty">${showArchive ? 'В архиве пусто.' : 'Пока нет учеников. Нажмите «+ Ученик».'}</div>`;
-  for (const s of list) h += `<div class="stu" data-a="openStu" data-id="${s.id}"><div><b>${esc(s.name)}</b>
+  for (const s of list) h += `<div class="stu" data-a="openStu" data-id="${s.id}"><div><b>${esc(s.name)}</b>${isNew(s) ? ' <span class="chip new">новый</span>' : ''}
     <small>${rub(s.rate)}/ч · ${showArchive ? 'в архиве' : slotsText(s.id)}</small></div>${badge(bal(s.id), s.id)}</div>`;
   return h;
 }
@@ -658,6 +668,7 @@ function sStuForm(id) {
     <label>Имя<input id="f_name" value="${esc(s.name)}" placeholder="Например, Маша (ОГЭ)"></label>
     <label>Цена за час (60 минут), ₽<input id="f_rate" type="number" inputmode="numeric" value="${esc(s.rate)}"></label>
     <label>Заметка (необязательно)<input id="f_note" value="${esc(s.note)}" placeholder="контакт родителя, класс, цель…"></label>
+    <label>Занимается с<input id="f_since" type="date" value="${id ? (s.since || '') : today()}"></label>
     <label class="check"><input id="f_remind" type="checkbox"${s.remind ? ' checked' : ''}>Платит наперёд — предупреждать, когда оплаченные занятия заканчиваются</label>
     <p class="muted" style="font-size:13px">Занятие на 90 минут будет стоить в полтора раза больше часа, на 45 — три четверти.${id ? ' Новая цена действует для занятий, которые вы отметите дальше; уже проведённые остаются по старой.' : ''}</p>
     <div class="btns"><button class="pri" data-a="saveStu" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>`;
@@ -665,7 +676,7 @@ function sStuForm(id) {
 function sStu(id) {
   const s = stu(id); if (!s) return null;
   const b = bal(id);
-  let h = `<h2>${esc(s.name)}</h2><p class="muted">${rub(s.rate)} в час${s.note ? ' · ' + esc(s.note) : ''}</p>
+  let h = `<h2>${esc(s.name)}</h2><p class="muted">${rub(s.rate)} в час${s.since ? ' · занимается с ' + fmtS(s.since) + '.' + s.since.slice(0, 4) : ''}${s.note ? ' · ' + esc(s.note) : ''}</p>
     <div>${badge(b, id)}</div>
     <div class="stats">
       <div><small>Всего оплачено</small><b>${rub(b.paid)}</b></div>
@@ -837,11 +848,11 @@ const A = {
   newStu: () => openSheet(() => sStuForm(null)),
   editStu: d => openSheet(() => sStuForm(d.id)),
   saveStu: d => {
-    const name = val('f_name'), rate = +val('f_rate'), note = val('f_note'), remind = !!document.getElementById('f_remind')?.checked;
+    const name = val('f_name'), rate = +val('f_rate'), note = val('f_note'), since = val('f_since') || undefined, remind = !!document.getElementById('f_remind')?.checked;
     if (!name) return toast('Введите имя');
     if (!(rate >= 0)) return toast('Проверьте цену');
-    if (d.id) { Object.assign(stu(d.id), { name, rate, note, remind }); save(); openSheet(() => sStu(d.id)); }
-    else { const id = uid(); S.students.push({ id, name, rate, note, remind: remind || undefined }); save(); openSheet(() => sSlot(id, null)); toast('Ученик добавлен. Теперь укажите постоянное время'); }
+    if (d.id) { Object.assign(stu(d.id), { name, rate, note, remind, since }); if (!since) delete stu(d.id).since; save(); openSheet(() => sStu(d.id)); }
+    else { const id = uid(); S.students.push({ id, name, rate, note, remind: remind || undefined, since }); save(); openSheet(() => sSlot(id, null)); toast('Ученик добавлен. Теперь укажите постоянное время'); }
     refresh();
   },
   slotForm: d => openSheet(() => sSlot(d.id, d.slot || null)),
