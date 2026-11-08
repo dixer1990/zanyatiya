@@ -172,7 +172,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.11 · 8 ноября 2026';
+const VERSION = '1.12 · 8 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -381,13 +381,6 @@ function unmarked() { const t = today(); return occ(addD(t, -60), t).filter(o =>
 /* ---------- экраны ---------- */
 let tab = 'sched', weekStart = monday(today()), moneyMonth = today().slice(0, 7), showArchive = false, sheetFn = null, deferredPrompt = null, UNDO = null;
 
-function backupBanner() {
-  if (!S.students.length) return '';
-  const days = S.lastBackup ? daysBetween(S.lastBackup, today()) : null;
-  if (days === null && daysBetween(S.created, today()) < 1) return '';
-  if (days !== null && days < 7) return '';
-  return `<div class="banner info" data-a="export">${days === null ? 'Копия данных ещё не сохранялась' : `Копия данных не сохранялась ${days} дн.`} — сохранить <span>›</span></div>`;
-}
 
 const ICON = {
   check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -455,7 +448,6 @@ function vSched() {
     const odd = S.students.filter(s => !s.archived && activeSlots(s.id).some(x => x.dur !== 60));
     if (odd.length) h += `<div class="banner info" data-a="hourlyOk">Цена у учеников теперь за час. Проверьте ставки: ${odd.map(s => esc(s.name)).join(', ')} — занятия не по 60 мин<span>›</span></div>`;
   }
-  h += backupBanner();
   const ws = pd(weekStart), wee = pd(we);
   const title = ws.getMonth() === wee.getMonth() ? `${ws.getDate()}–${wee.getDate()} ${MG[ws.getMonth()]}` : `${ws.getDate()} ${MG[ws.getMonth()]} – ${wee.getDate()} ${MG[wee.getMonth()]}`;
   const act = L.filter(o => o.status !== 'cancel'), dn = L.filter(o => o.status === 'done');
@@ -525,8 +517,8 @@ function vMoney() {
 
 function vMore() {
   const last = S.lastBackup ? `Последняя копия: ${fmtD(S.lastBackup)}.` : 'Копия ещё не сохранялась.';
-  return `<h3>Копия данных</h3><div class="box">
-    <p style="margin-top:0">Все данные хранятся только в этом телефоне. Сохраняйте копию раз в неделю — например, отправляйте файл себе в Telegram или на почту. Если телефон сменится, загрузите копию в приложение на новом.</p>
+  return `<h3>Перенос и копия данных</h3><div class="box">
+    <p style="margin-top:0">Все данные хранятся только в этом телефоне. Чтобы перенести их на другое устройство, нажмите «Сохранить копию», отправьте файл себе (например, в Telegram), а на другом устройстве откройте приложение и нажмите «Загрузить из копии».</p>
     <p class="muted">${last}</p>
     <div class="btns"><button class="pri" data-a="export">Сохранить копию</button><button class="btn" data-a="import">Загрузить из копии</button></div></div>
   <h3>Правило оплаты</h3><div class="box">
