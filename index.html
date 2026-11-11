@@ -120,7 +120,8 @@ textarea{resize:vertical;min-height:70px}
 .day.off .dh{color:var(--task);font-weight:700}
 .offtag{border:0;background:none;color:var(--task);font:inherit;padding:0;text-decoration:underline;text-transform:none;letter-spacing:0}
 .dh .cnt{text-transform:none;letter-spacing:0}.dh .cnt.over{color:var(--bad);font-weight:700}
-.free .row{align-items:flex-start}.free .row b{min-width:34px}
+.free .row{align-items:flex-start}
+.win{display:block;margin:0 0 5px auto;border:1.5px solid var(--acc);background:var(--card);color:var(--acc);border-radius:10px;padding:6px 10px;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}.free .row b{min-width:34px}
 #printArea{display:none}
 @media print{
   body{background:#fff!important}
@@ -211,7 +212,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.16 · 11 ноября 2026';
+const VERSION = '1.17 · 12 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -933,7 +934,7 @@ function freeBits(date, F, T) {
 }
 function bitsToWindows(bits, F, dur) {
   const res = []; let i = 0;
-  while (i < bits.length) { if (!bits[i]) { i++; continue; } let j = i; while (j < bits.length && bits[j]) j++; if ((j - i) * 5 >= dur) res.push(toHM(F + i * 5) + '–' + toHM(F + j * 5)); i = j; }
+  while (i < bits.length) { if (!bits[i]) { i++; continue; } let j = i; while (j < bits.length && bits[j]) j++; if ((j - i) * 5 >= dur) res.push([F + i * 5, F + j * 5]); i = j; }
   return res;
 }
 function sFree() {
@@ -950,7 +951,7 @@ function sFree() {
   if (f.mode === 'perm') {
     for (let wd = 1; wd <= 7; wd++) {
       let d = addD(today(), 1); d = addD(d, (wd - wdOf(d) + 7) % 7);
-      const wOff = weeklyOffOn(wd);
+      const d0 = d, wOff = weeklyOffOn(wd);
       if (wOff) { rows.push([WDF[wd - 1], [], 0, wOff]); continue; }
       let bits = null, n = 0;
       for (let k = 0; k < 4; k++, d = addD(d, 7)) {
@@ -958,7 +959,7 @@ function sFree() {
         n = Math.max(n, dayLessons(d).length);
         const b = freeBits(d, F, T); bits = bits ? bits.map((x, i) => x && b[i]) : b;
       }
-      rows.push([WDF[wd - 1], bits ? bitsToWindows(bits, F, f.dur) : [], n]);
+      rows.push([WDF[wd - 1], bits ? bitsToWindows(bits, F, f.dur) : [], n, null, d0]);
     }
     h += `<h3>Свободно каждую неделю (проверено на 4 недели вперёд)</h3>`;
   } else {
@@ -966,20 +967,37 @@ function sFree() {
     for (let i = 0; i < 7; i++) {
       const d = addD(ws, i); if (d < today()) continue;
       const off = offOf(d);
-      rows.push([fmtD(d), off ? [] : bitsToWindows(freeBits(d, F, T), F, f.dur), dayLessons(d).length, off]);
+      rows.push([fmtD(d), off ? [] : bitsToWindows(freeBits(d, F, T), F, f.dur), dayLessons(d).length, off, d]);
     }
     h += `<h3>${f.mode === 'w1' ? 'Следующая неделя' : 'Эта неделя'}</h3>`;
   }
   const max = S.dayMax || 6;
-  h += `<div class="box free">${rows.map(([d, w, n, off]) => {
+  h += `<div class="box free">${rows.map(([d, w, n, off, date]) => {
     let r;
     if (off) r = `<span class="muted">выходной${off.note ? ' · ' + esc(off.note) : ''}</span>`;
     else if (n >= max) r = `<span class="unp">уже ${n} ${lessonsWord(n)} — это ваш максимум</span>`;
-    else r = (w.length ? w.join('<br>') : '<span class="muted">нет окон</span>') + `<small>${n ? `уже ${n} ${lessonsWord(n)}${f.mode === 'perm' ? ' (в самый загруженный из 4 дней)' : ''}` : 'занятий нет'}</small>`;
+    else r = (w.length ? w.map(([a, b]) => `<button class="win" data-a="freePick" data-date="${date}" data-from="${toHM(a)}" data-to="${toHM(b)}">${toHM(a)}–${toHM(b)}</button>`).join('') : '<span class="muted">нет окон</span>') + `<small>${n ? `уже ${n} ${lessonsWord(n)}${f.mode === 'perm' ? ' (в самый загруженный из 4 дней)' : ''}` : 'занятий нет'}</small>`;
     return `<div class="row"><b>${d}</b><span style="text-align:right">${r}</span></div>`;
   }).join('')}</div>`;
+  h += `<p class="muted" style="font-size:13px">Нажмите на промежуток, чтобы сразу поставить туда занятие.</p>`;
   if (f.mode === 'perm') h += `<p class="muted" style="font-size:13px">Время указано промежутком: занятие можно начать в любой момент, если оно успевает закончиться до конца промежутка. Занятия «раз в 2 недели» тоже учтены.</p>`;
   return h;
+}
+
+let PICK = null;
+function sPick() {
+  const p = PICK; if (!p) return null;
+  const list = S.students.filter(s => !s.archived).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  if (!list.length) return `<h2>Поставить занятие</h2><div class="empty">Сначала добавьте ученика во вкладке «Ученики».</div><button class="link" data-a="freeBack">← к свободным окнам</button>`;
+  const perm = p.mode === 'perm';
+  return `<h2>Поставить занятие</h2><p class="muted">${perm ? `${WDF[wdOf(p.date) - 1]}` : fmtD(p.date)}: свободно с ${p.from} до ${p.to}</p>
+    <label>Ученик<select id="f_sid">${list.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    <label>Как поставить<select id="f_kind"><option value="once"${perm ? '' : ' selected'}>разовое занятие</option><option value="1"${perm ? ' selected' : ''}>постоянно, каждую неделю</option><option value="2">постоянно, раз в 2 недели</option></select></label>
+    <div class="two"><label>${perm ? 'Первое занятие' : 'Дата'}<input id="f_date" type="date" value="${p.date}"></label><label>Время<input id="f_time" type="time" value="${p.from}"></label></div>
+    <label>Длительность, мин<input id="f_dur" type="number" inputmode="numeric" value="${p.dur}"></label>
+    <div id="dayInfo" data-ex="" data-dur="${p.dur}">${dayInfoHtml(p.date, '', p.from, p.dur)}</div>
+    <div class="btns"><button class="pri" data-a="savePick">Поставить</button></div>
+    <button class="link" data-a="freeBack">← к свободным окнам</button>`;
 }
 
 /* ---------- статистика ---------- */
@@ -1277,6 +1295,17 @@ const A = {
     const o = getOcc(d.r); if (!o) return;
     setOcc(o, { topic: val('f_topic') || undefined, hw: val('f_hw') || undefined });
     closeSheet(); toast('Заметки сохранены'); refresh();
+  },
+  freePick: d => { PICK = { date: d.date, from: d.from, to: d.to, dur: (FREE && FREE.dur) || 60, mode: FREE ? FREE.mode : 'w0' }; openSheet(sPick); },
+  freeBack: () => openSheet(sFree),
+  savePick: () => {
+    const sid = val('f_sid'), kind = val('f_kind'), date = val('f_date'), time = val('f_time'), dur = +val('f_dur') || 60;
+    if (!sid || !date || !time) return toast('Заполните дату и время');
+    const u = snap(), s = stu(sid);
+    if (kind === 'once') { S.extra.push({ id: uid(), sid, date, time, dur }); }
+    else { const ns = { id: uid(), sid, wd: wdOf(date), time, dur, from: date, to: null }; if (kind === '2') ns.every = 2; S.slots.push(ns); }
+    save(); closeSheet(); weekStart = monday(date);
+    toast(kind === 'once' ? `${s.name}: занятие ${fmtD(date)}, ${time}` : `${s.name}: ${WDF[wdOf(date) - 1]}, ${time}${kind === '2' ? ', раз в 2 недели' : ', каждую неделю'}`, undoTo(u)); refresh();
   },
   saveExtra: () => {
     const sid = val('f_sid'), date = val('f_date'), time = val('f_time'), dur = +val('f_dur') || 60;
