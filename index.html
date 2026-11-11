@@ -211,7 +211,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.15 · 11 ноября 2026';
+const VERSION = '1.16 · 11 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -245,7 +245,9 @@ function examInfo(s) {
   return { name: s.exam || 'экзамена', days, left };
 }
 /* нагрузка по дням и выходные */
-const offOf = d => (S.offs || []).find(x => d >= x.from && d <= x.to);
+// выходные: отпуск «с — по» или постоянный выходной день недели (weekly = 1…7)
+const offOf = d => (S.offs || []).find(x => x.weekly ? (wdOf(d) === x.weekly && d >= x.from) : (d >= x.from && d <= x.to));
+const weeklyOffOn = wd => (S.offs || []).find(x => x.weekly === wd && x.from <= addD(today(), 28));
 const dayLessons = (d, exclude) => occ(d, d).filter(o => o.status !== 'cancel' && refOf(o) !== exclude);
 function dayInfoHtml(d, exclude, time, dur) {
   if (!d) return '';
@@ -629,7 +631,7 @@ function vSched() {
   for (let i = 0; i < 7; i++) {
     const d = addD(weekStart, i), ls = L.concat(G).filter(o => o.date === d).concat(S.tasks.filter(x => x.date === d).map(x => ({ task: x, time: x.from || '' }))).sort((a, b) => a.time.localeCompare(b.time));
     const off = offOf(d), nL = L.filter(o => o.date === d && o.status !== 'cancel').length, mx = S.dayMax || 6;
-    h += `<div class="day${d === t ? ' today' : ''}${off ? ' off' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}${off ? ` · <button class="offtag" data-a="openOff" data-id="${off.id}">выходной${off.note ? ': ' + esc(off.note) : ''}</button>` : ''}${nL > 1 ? ` <span class="cnt${nL > mx ? ' over' : ''}">· ${nL} ${lessonsWord(nL)}</span>` : ''}</div>`;
+    h += `<div class="day${d === t ? ' today' : ''}${off ? ' off' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}${off ? ` · <button class="offtag" data-a="openOff" data-id="${off.id}">${off.weekly ? 'постоянный выходной' : 'выходной'}${off.note ? ': ' + esc(off.note) : ''}</button>` : ''}${nL > 1 ? ` <span class="cnt${nL > mx ? ' over' : ''}">· ${nL} ${lessonsWord(nL)}</span>` : ''}</div>`;
     h += ls.length ? ls.map(o => o.task ? taskCard(o.task) : card(o)).join('') : `<div class="none">${off ? 'выходной — можно добавить дела через «+»' : 'нет занятий'}</div>`;
     h += `</div>`;
   }
@@ -948,9 +950,11 @@ function sFree() {
   if (f.mode === 'perm') {
     for (let wd = 1; wd <= 7; wd++) {
       let d = addD(today(), 1); d = addD(d, (wd - wdOf(d) + 7) % 7);
+      const wOff = weeklyOffOn(wd);
+      if (wOff) { rows.push([WDF[wd - 1], [], 0, wOff]); continue; }
       let bits = null, n = 0;
       for (let k = 0; k < 4; k++, d = addD(d, 7)) {
-        if (offOf(d)) continue;                     // разовые выходные не мешают постоянному времени
+        if (offOf(d)) continue;                     // разовые выходные (отпуск) не мешают постоянному времени
         n = Math.max(n, dayLessons(d).length);
         const b = freeBits(d, F, T); bits = bits ? bits.map((x, i) => x && b[i]) : b;
       }
@@ -1012,7 +1016,7 @@ function sNew() {
   return `<h2>Добавить</h2><div class="choice">
     <button data-a="newExtra">Занятие с учеником<small>разовое, вне постоянного расписания</small></button>
     <button data-a="newTask">Дело<small>любое дело в планере: описание, дата и время</small></button>
-    <button data-a="newOff">Выходной<small>день или несколько дней без занятий; дела в них ставить можно</small></button>
+    <button data-a="newOff">Выходной<small>отпуск с — по или постоянный выходной день недели; дела ставить можно</small></button>
     <button data-a="freeForm">Найти свободное время<small>куда поставить нового ученика или перенос</small></button></div>`;
 }
 function sTask(id) {
@@ -1038,12 +1042,20 @@ function sNote(ref) {
     <label>Домашнее задание<textarea id="f_hw" rows="3" placeholder="что задано к следующему разу">${esc(o.hw || '')}</textarea></label>
     <div class="btns"><button class="pri" data-a="saveNote" data-r="${ref}">Сохранить</button></div>`;
 }
+function offSlotsInfo(wd) {
+  const L = S.slots.filter(x => x.wd === wd && (!x.to || x.to >= today()) && stu(x.sid) && !stu(x.sid).archived);
+  return L.length ? `<p class="note">По этому дню стоят постоянные занятия: ${L.map(x => `${esc(stu(x.sid).name)} ${x.time}`).join(', ')}. Выходной их не отменяет — перенесите их в карточке ученика (постоянное расписание).</p>` : '';
+}
 function sOff(id) {
   const x = id ? (S.offs || []).find(o => o.id === id) : { from: weekStart === monday(today()) ? today() : weekStart, to: '', note: '' };
   if (!x) return null;
+  const weekly = !!x.weekly, wd = x.weekly || 7;
   return `<h2>${id ? 'Выходной' : 'Новый выходной'}</h2><p class="muted">В выходные не ищутся свободные окна, а при переносе на такой день будет предупреждение. Дела в выходные ставить можно.</p>
-    <div class="two"><label>С<input id="f_ofrom" type="date" value="${x.from}"></label><label>По (включительно)<input id="f_oto" type="date" value="${x.to || x.from}"></label></div>
-    <label>Подпись (необязательно)<input id="f_onote" value="${esc(x.note || '')}" placeholder="например, отпуск, день рождения"></label>
+    <label>Какой<select id="f_omode"${id ? ' disabled' : ''}><option value="range"${weekly ? '' : ' selected'}>отпуск или отъезд: с — по</option><option value="weekly"${weekly ? ' selected' : ''}>каждую неделю в один и тот же день</option></select></label>
+    <div id="offRange" style="${weekly ? 'display:none' : ''}"><div class="two"><label>С<input id="f_ofrom" type="date" value="${weekly ? today() : x.from}"></label><label>По (включительно)<input id="f_oto" type="date" value="${weekly ? today() : (x.to || x.from)}"></label></div></div>
+    <div id="offWeekly" style="${weekly ? '' : 'display:none'}"><div class="two"><label>День недели<select id="f_owd">${WDF.map((w, i) => `<option value="${i + 1}"${wd === i + 1 ? ' selected' : ''}>${w}</option>`).join('')}</select></label><label>Начиная с<input id="f_owfrom" type="date" value="${weekly ? x.from : today()}"></label></div>
+      <div id="offInfo">${offSlotsInfo(wd)}</div></div>
+    <label>Подпись (необязательно)<input id="f_onote" value="${esc(x.note || '')}" placeholder="например, отпуск, день для учёбы"></label>
     <div class="btns"><button class="pri" data-a="saveOff" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>
     ${id ? `<button class="link danger" data-a="delOff" data-id="${id}">Убрать выходной</button>` : ''}`;
 }
@@ -1368,6 +1380,15 @@ const A = {
   newOff: () => openSheet(() => sOff(null)),
   openOff: d => openSheet(() => sOff(d.id)),
   saveOff: d => {
+    if (val('f_omode') === 'weekly') {
+      const wd = +val('f_owd'), from = val('f_owfrom') || today(), note = val('f_onote'), u = snap();
+      S.offs = S.offs || [];
+      if (d.id) Object.assign(S.offs.find(o => o.id === d.id), { weekly: wd, from, note });
+      else S.offs.push({ id: uid(), weekly: wd, from, note });
+      const busy = S.slots.some(x => x.wd === wd && (!x.to || x.to >= today()) && stu(x.sid) && !stu(x.sid).archived);
+      save(); closeSheet(); toast(`Выходной: ${['каждый понедельник', 'каждый вторник', 'каждую среду', 'каждый четверг', 'каждую пятницу', 'каждую субботу', 'каждое воскресенье'][wd - 1]}${busy ? '. Постоянные занятия этого дня остались — перенесите их' : ''}`, undoTo(u)); refresh();
+      return;
+    }
     const from = val('f_ofrom'), to0 = val('f_oto') || from, note = val('f_onote');
     if (!from) return toast('Укажите дату');
     const to = to0 < from ? from : to0, u = snap();
@@ -1418,6 +1439,10 @@ document.addEventListener('click', e => {
   const f = A[t.dataset.a]; if (f) { e.preventDefault(); f(t.dataset, t, e); }
 });
 function readRep() { if (!REP) return; const m = document.getElementById('f_rym'), c = document.getElementById('f_rpay'), q = document.getElementById('f_rprep'); if (m) REP.ym = m.value; if (c) REP.pay = c.checked; if (q) REP.prep = q.checked; }
+document.addEventListener('change', e => {
+  if (e.target.id === 'f_omode') { const w = e.target.value === 'weekly'; $('#offRange').style.display = w ? 'none' : ''; $('#offWeekly').style.display = w ? '' : 'none'; }
+  if (e.target.id === 'f_owd') $('#offInfo').innerHTML = offSlotsInfo(+e.target.value);
+});
 // при выборе даты/времени показываем нагрузку этого дня
 ['input', 'change'].forEach(ev => document.addEventListener(ev, e => { if (['f_date', 'f_time', 'f_dur'].includes(e.target.id)) updateDayInfo(); }));
 // смена месяца или галочки в отчёте сразу обновляет предпросмотр

@@ -1,6 +1,6 @@
 // Хранит файлы приложения в телефоне, чтобы оно открывалось без интернета.
 // Когда интернет есть, проверяет свежую версию; новая версия самого помощника сразу перезапускает страницу.
-const CACHE = 'uchet-app-v16';
+const CACHE = 'uchet-app-v17';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable.png'];
 
 self.addEventListener('install', e => {
