@@ -100,6 +100,10 @@ textarea{resize:vertical;min-height:70px}
 .tbl td{text-align:right;padding:7px 4px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
 .tbl th:first-child,.tbl td:first-child{text-align:left}
 .tbl tr.tot td{font-weight:700}
+.note.bad{background:var(--badb);color:var(--bad)}
+.day.off .dh{color:var(--task);font-weight:700}
+.offtag{border:0;background:none;color:var(--task);font:inherit;padding:0;text-decoration:underline;text-transform:none;letter-spacing:0}
+.dh .cnt{text-transform:none;letter-spacing:0}.dh .cnt.over{color:var(--bad);font-weight:700}
 .free .row{align-items:flex-start}.free .row b{min-width:34px}
 #printArea{display:none}
 @media print{
@@ -191,7 +195,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.13 · 8 ноября 2026';
+const VERSION = '1.14 · 11 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -224,11 +228,33 @@ function examInfo(s) {
   const left = occ(today(), addD(s.examDate, -1)).filter(o => o.sid === s.id && o.status !== 'cancel' && o.status !== 'done' && !isPast(o)).length;
   return { name: s.exam || 'экзамена', days, left };
 }
+/* нагрузка по дням и выходные */
+const offOf = d => (S.offs || []).find(x => d >= x.from && d <= x.to);
+const dayLessons = (d, exclude) => occ(d, d).filter(o => o.status !== 'cancel' && refOf(o) !== exclude);
+function dayInfoHtml(d, exclude, time, dur) {
+  if (!d) return '';
+  const L = dayLessons(d, exclude), n = L.length, off = offOf(d), max = S.dayMax || 6;
+  let h = '';
+  if (off) h += `<p class="note">${fmtD(d)} — выходной${off.note ? ' (' + esc(off.note) + ')' : ''}</p>`;
+  if (time) {
+    const s0 = toMin(time), e0 = s0 + (+dur || 60);
+    const hit = L.filter(o => { const s1 = toMin(o.time); return s1 < e0 && s0 < s1 + (+o.dur || 60); });
+    if (hit.length) h += `<p class="note bad">Пересекается по времени: ${hit.map(o => `${esc(stu(o.sid).name)} ${o.time}–${endT(o.time, o.dur)}`).join(', ')}</p>`;
+  }
+  const times = L.map(o => `${o.time}–${endT(o.time, o.dur)}`).join(', ');
+  if (n + 1 > max) h += `<p class="note bad">Это будет ${n + 1}-е занятие в этот день — больше вашего максимума (${max}).${times ? '<br>Уже стоят: ' + times : ''}</p>`;
+  else h += `<p class="muted" style="font-size:13px;margin:6px 0">${n ? `В этот день уже ${n} ${lessonsWord(n)}: ${times}. Это будет ${n + 1}-е из ${max} возможных.` : 'В этот день занятий пока нет.'}</p>`;
+  return h;
+}
+function updateDayInfo() {
+  const box = document.getElementById('dayInfo'); if (!box) return;
+  box.innerHTML = dayInfoHtml(val('f_date'), box.dataset.ex || '', val('f_time'), +val('f_dur') || +box.dataset.dur || 60);
+}
 const isNew = s => s.since && s.since <= today() && daysBetween(s.since, today()) < 30;
 const lessonsWord = n => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'занятие' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'занятия' : 'занятий'; };
 
 /* ---------- данные ---------- */
-function blank() { return { v: 1, students: [], slots: [], ov: {}, extra: [], pays: [], tasks: [], limit: 2, lastBackup: null, created: today() }; }
+function blank() { return { v: 1, students: [], slots: [], ov: {}, extra: [], pays: [], tasks: [], offs: [], dayMax: 6, limit: 2, lastBackup: null, created: today() }; }
 function fix(s) {
   const b = blank();
   for (const k in b) if (s[k] === undefined) s[k] = b[k];
@@ -487,8 +513,9 @@ function vSched() {
   if (!S.students.filter(s => !s.archived).length) h += `<div class="empty">Начните со вкладки «Ученики»: добавьте ученика, его ставку и постоянное время занятий — расписание появится здесь само.</div>`;
   for (let i = 0; i < 7; i++) {
     const d = addD(weekStart, i), ls = L.concat(G).filter(o => o.date === d).concat(S.tasks.filter(x => x.date === d).map(x => ({ task: x, time: x.from || '' }))).sort((a, b) => a.time.localeCompare(b.time));
-    h += `<div class="day${d === t ? ' today' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}</div>`;
-    h += ls.length ? ls.map(o => o.task ? taskCard(o.task) : card(o)).join('') : `<div class="none">нет занятий</div>`;
+    const off = offOf(d), nL = L.filter(o => o.date === d && o.status !== 'cancel').length, mx = S.dayMax || 6;
+    h += `<div class="day${d === t ? ' today' : ''}${off ? ' off' : ''}"><div class="dh">${fmtD(d)}${d === t ? ' · сегодня' : ''}${off ? ` · <button class="offtag" data-a="openOff" data-id="${off.id}">выходной${off.note ? ': ' + esc(off.note) : ''}</button>` : ''}${nL > 1 ? ` <span class="cnt${nL > mx ? ' over' : ''}">· ${nL} ${lessonsWord(nL)}</span>` : ''}</div>`;
+    h += ls.length ? ls.map(o => o.task ? taskCard(o.task) : card(o)).join('') : `<div class="none">${off ? 'выходной — можно добавить дела через «+»' : 'нет занятий'}</div>`;
     h += `</div>`;
   }
   h += `<button class="fab" data-a="newAny" aria-label="Добавить">+</button>`;
@@ -555,6 +582,10 @@ function vMore() {
   <h3>Отчёты</h3><div class="box">
     <label>Ваше имя для отчётов родителям<input id="f_tutor" value="${esc(S.tutorName || '')}" placeholder="например, Дмитрий Ларин"></label>
     <button class="btn" data-a="saveTutor">Сохранить</button></div>
+  <h3>Нагрузка</h3><div class="box">
+    <label>Максимум занятий в день<input id="f_daymax" type="number" inputmode="numeric" min="1" value="${S.dayMax || 6}"></label>
+    <p class="muted" style="font-size:13px">При переносе, разовом занятии и поиске свободного времени приложение предупредит, если в день получится больше.</p>
+    <button class="btn" data-a="saveDayMax">Сохранить</button></div>
   <h3>Правило оплаты</h3><div class="box">
     <label>Сколько занятий можно провести без оплаты<input id="f_limit" type="number" inputmode="numeric" min="1" value="${S.limit}"></label>
     <p class="muted" style="font-size:13px">Когда у ученика набирается столько неоплаченных занятий, он подсвечивается красным.</p>
@@ -638,6 +669,7 @@ function sMove(ref) {
   const o = getOcc(ref); if (!o) return null;
   return `<h2>Перенос</h2><p class="muted">${esc(stu(o.sid).name)} · сейчас: ${fmtD(o.date)}, ${o.time}</p>
     <div class="two"><label>Новая дата<input id="f_date" type="date" value="${o.date}"></label><label>Время<input id="f_time" type="time" value="${o.time}"></label></div>
+    <div id="dayInfo" data-ex="${ref}" data-dur="${o.dur}">${dayInfoHtml(o.date, ref, o.time, o.dur)}</div>
     <p class="muted" style="font-size:13px">Переносится только это занятие. Чтобы поменять постоянное время, откройте карточку ученика → «Расписание».</p>
     <div class="btns"><button class="pri" data-a="lesMove" data-r="${ref}">Перенести</button><button class="btn" data-a="back" data-r="${ref}">Назад</button></div>`;
 }
@@ -789,17 +821,32 @@ function sFree() {
   if (f.mode === 'perm') {
     for (let wd = 1; wd <= 7; wd++) {
       let d = addD(today(), 1); d = addD(d, (wd - wdOf(d) + 7) % 7);
-      let bits = null;
-      for (let k = 0; k < 4; k++, d = addD(d, 7)) { const b = freeBits(d, F, T); bits = bits ? bits.map((x, i) => x && b[i]) : b; }
-      rows.push([WDF[wd - 1], bitsToWindows(bits, F, f.dur)]);
+      let bits = null, n = 0;
+      for (let k = 0; k < 4; k++, d = addD(d, 7)) {
+        if (offOf(d)) continue;                     // разовые выходные не мешают постоянному времени
+        n = Math.max(n, dayLessons(d).length);
+        const b = freeBits(d, F, T); bits = bits ? bits.map((x, i) => x && b[i]) : b;
+      }
+      rows.push([WDF[wd - 1], bits ? bitsToWindows(bits, F, f.dur) : [], n]);
     }
     h += `<h3>Свободно каждую неделю (проверено на 4 недели вперёд)</h3>`;
   } else {
     const ws = addD(monday(today()), f.mode === 'w1' ? 7 : 0);
-    for (let i = 0; i < 7; i++) { const d = addD(ws, i); if (d < today()) continue; rows.push([fmtD(d), bitsToWindows(freeBits(d, F, T), F, f.dur)]); }
+    for (let i = 0; i < 7; i++) {
+      const d = addD(ws, i); if (d < today()) continue;
+      const off = offOf(d);
+      rows.push([fmtD(d), off ? [] : bitsToWindows(freeBits(d, F, T), F, f.dur), dayLessons(d).length, off]);
+    }
     h += `<h3>${f.mode === 'w1' ? 'Следующая неделя' : 'Эта неделя'}</h3>`;
   }
-  h += `<div class="box free">${rows.map(([d, w]) => `<div class="row"><b>${d}</b><span style="text-align:right">${w.length ? w.join('<br>') : '<span class="muted">нет окон</span>'}</span></div>`).join('')}</div>`;
+  const max = S.dayMax || 6;
+  h += `<div class="box free">${rows.map(([d, w, n, off]) => {
+    let r;
+    if (off) r = `<span class="muted">выходной${off.note ? ' · ' + esc(off.note) : ''}</span>`;
+    else if (n >= max) r = `<span class="unp">уже ${n} ${lessonsWord(n)} — это ваш максимум</span>`;
+    else r = (w.length ? w.join('<br>') : '<span class="muted">нет окон</span>') + `<small>${n ? `уже ${n} ${lessonsWord(n)}${f.mode === 'perm' ? ' (в самый загруженный из 4 дней)' : ''}` : 'занятий нет'}</small>`;
+    return `<div class="row"><b>${d}</b><span style="text-align:right">${r}</span></div>`;
+  }).join('')}</div>`;
   if (f.mode === 'perm') h += `<p class="muted" style="font-size:13px">Время указано промежутком: занятие можно начать в любой момент, если оно успевает закончиться до конца промежутка. Занятия «раз в 2 недели» тоже учтены.</p>`;
   return h;
 }
@@ -838,6 +885,7 @@ function sNew() {
   return `<h2>Добавить</h2><div class="choice">
     <button data-a="newExtra">Занятие с учеником<small>разовое, вне постоянного расписания</small></button>
     <button data-a="newTask">Дело<small>любое дело в планере: описание, дата и время</small></button>
+    <button data-a="newOff">Выходной<small>день или несколько дней без занятий; дела в них ставить можно</small></button>
     <button data-a="freeForm">Найти свободное время<small>куда поставить нового ученика или перенос</small></button></div>`;
 }
 function sTask(id) {
@@ -863,6 +911,15 @@ function sNote(ref) {
     <label>Домашнее задание<textarea id="f_hw" rows="3" placeholder="что задано к следующему разу">${esc(o.hw || '')}</textarea></label>
     <div class="btns"><button class="pri" data-a="saveNote" data-r="${ref}">Сохранить</button></div>`;
 }
+function sOff(id) {
+  const x = id ? (S.offs || []).find(o => o.id === id) : { from: weekStart === monday(today()) ? today() : weekStart, to: '', note: '' };
+  if (!x) return null;
+  return `<h2>${id ? 'Выходной' : 'Новый выходной'}</h2><p class="muted">В выходные не ищутся свободные окна, а при переносе на такой день будет предупреждение. Дела в выходные ставить можно.</p>
+    <div class="two"><label>С<input id="f_ofrom" type="date" value="${x.from}"></label><label>По (включительно)<input id="f_oto" type="date" value="${x.to || x.from}"></label></div>
+    <label>Подпись (необязательно)<input id="f_onote" value="${esc(x.note || '')}" placeholder="например, отпуск, день рождения"></label>
+    <div class="btns"><button class="pri" data-a="saveOff" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>
+    ${id ? `<button class="link danger" data-a="delOff" data-id="${id}">Убрать выходной</button>` : ''}`;
+}
 function sExtra() {
   const list = S.students.filter(s => !s.archived).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   if (!list.length) return `<h2>Разовое занятие</h2><div class="empty">Сначала добавьте ученика во вкладке «Ученики».</div>`;
@@ -871,6 +928,7 @@ function sExtra() {
     <label>Ученик<select id="f_sid">${list.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
     <div class="two"><label>Дата<input id="f_date" type="date" value="${d}"></label><label>Время<input id="f_time" type="time" value="16:00"></label></div>
     <label>Длительность, мин<input id="f_dur" type="number" inputmode="numeric" value="60"></label>
+    <div id="dayInfo" data-ex="" data-dur="60">${dayInfoHtml(d, '', '16:00', 60)}</div>
     <div class="btns"><button class="pri" data-a="saveExtra">Добавить</button></div>`;
 }
 function sStuForm(id) {
@@ -1155,6 +1213,25 @@ const A = {
     save(); closeSheet(); refresh();
   },
 
+  saveDayMax: () => { const n = Math.round(+val('f_daymax')); if (!(n >= 1)) return toast('Нужно число от 1'); S.dayMax = n; save(); toast('Сохранено'); refresh(); },
+  newOff: () => openSheet(() => sOff(null)),
+  openOff: d => openSheet(() => sOff(d.id)),
+  saveOff: d => {
+    const from = val('f_ofrom'), to0 = val('f_oto') || from, note = val('f_onote');
+    if (!from) return toast('Укажите дату');
+    const to = to0 < from ? from : to0, u = snap();
+    S.offs = S.offs || [];
+    if (d.id) Object.assign(S.offs.find(o => o.id === d.id), { from, to, note });
+    else S.offs.push({ id: uid(), from, to, note });
+    const L = occ(from, to).filter(o => !o.status);
+    let msg = d.id ? 'Сохранено' : 'Выходной добавлен';
+    if (L.length && confirm(`На эти дни стоит ${L.length} ${lessonsWord(L.length)}. Отменить ${L.length === 1 ? 'его' : 'их'}?`)) {
+      for (const o of L) setOcc(o, { status: 'cancel' });
+      msg += `, отменено занятий: ${L.length}`;
+    }
+    save(); closeSheet(); toast(msg, undoTo(u)); refresh();
+  },
+  delOff: d => { const u = snap(); S.offs = (S.offs || []).filter(o => o.id !== d.id); save(); closeSheet(); toast('Выходной убран', undoTo(u)); refresh(); },
   saveLimit: () => { const n = Math.round(+val('f_limit')); if (!(n >= 1)) return toast('Нужно число от 1'); S.limit = n; save(); toast('Сохранено'); refresh(); },
   export: exportData,
   import: () => $('#importFile').click(),
@@ -1190,6 +1267,8 @@ document.addEventListener('click', e => {
   const f = A[t.dataset.a]; if (f) { e.preventDefault(); f(t.dataset, t, e); }
 });
 function readRep() { if (!REP) return; const m = document.getElementById('f_rym'), c = document.getElementById('f_rpay'); if (m) REP.ym = m.value; if (c) REP.pay = c.checked; }
+// при выборе даты/времени показываем нагрузку этого дня
+['input', 'change'].forEach(ev => document.addEventListener(ev, e => { if (['f_date', 'f_time', 'f_dur'].includes(e.target.id)) updateDayInfo(); }));
 // смена месяца или галочки в отчёте сразу обновляет предпросмотр
 document.addEventListener('change', e => { if ((e.target.id === 'f_rym' || e.target.id === 'f_rpay') && REP) { readRep(); drawSheet(); } });
 /* листание недель свайпом влево-вправо */
