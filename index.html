@@ -100,6 +100,22 @@ textarea{resize:vertical;min-height:70px}
 .tbl td{text-align:right;padding:7px 4px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
 .tbl th:first-child,.tbl td:first-child{text-align:left}
 .tbl tr.tot td{font-weight:700}
+.tasks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.tkn{position:relative;width:40px;height:36px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:14px;color:var(--mut);padding:0}
+.tkn.w{background:var(--warnb);border-color:var(--warn);color:var(--warn)}
+.tkn.d{background:var(--ok);border-color:var(--ok);color:var(--onacc)}
+.tkn.weak::after{content:'';position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:5px;background:var(--bad);border:2px solid var(--card)}
+.legend{font-size:12px;color:var(--mut);display:flex;gap:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;border:1.5px solid var(--line)}
+.legend i.w{background:var(--warnb);border-color:var(--warn)}.legend i.d{background:var(--ok);border-color:var(--ok)}.legend i.weak{background:var(--bad);border-color:var(--bad);border-radius:5px}
+.chart{width:100%;height:auto;display:block;margin:4px 0}
+.ch-grid{stroke:var(--line);stroke-width:1}.ch-t{fill:var(--mut);font-size:10px}.ch-v{fill:var(--ink);font-size:11px;font-weight:700}
+.ch-line{fill:none;stroke:var(--acc);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.ch-dot{fill:var(--acc);stroke:var(--card);stroke-width:2}.ch-hit{fill:transparent}
+.todaybox{background:var(--accb);border-radius:16px;padding:10px 8px 5px;margin:2px 0 12px}
+.todaybox .th{display:flex;flex-direction:column;gap:2px;padding:0 4px 8px}
+.todaybox .th b{color:var(--acc);font-size:15px}.todaybox .th small{color:var(--acc);font-size:13px}
+.todaybox .none{margin:0 4px 8px}
 .note.bad{background:var(--badb);color:var(--bad)}
 .day.off .dh{color:var(--task);font-weight:700}
 .offtag{border:0;background:none;color:var(--task);font:inherit;padding:0;text-decoration:underline;text-transform:none;letter-spacing:0}
@@ -195,7 +211,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.14 · 11 ноября 2026';
+const VERSION = '1.15 · 11 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -249,6 +265,83 @@ function dayInfoHtml(d, exclude, time, dur) {
 function updateDayInfo() {
   const box = document.getElementById('dayInfo'); if (!box) return;
   box.innerHTML = dayInfoHtml(val('f_date'), box.dataset.ex || '', val('f_time'), +val('f_dur') || +box.dataset.dur || 60);
+}
+/* подготовка к экзамену: пробники и план по заданиям */
+function parseNums(str) {
+  const out = new Set();
+  for (const part of String(str || '').split(/[,;\s]+/)) {
+    const m = part.match(/^(\d+)(?:[-–—](\d+))?$/); if (!m) continue;
+    const a = +m[1], b = m[2] ? +m[2] : a;
+    for (let i = Math.min(a, b); i <= Math.max(a, b) && i - Math.min(a, b) < 60; i++) out.add(i);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+const mocksOf = s => (s.mocks || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+function weakTasks(s) {             // где чаще ошибки — по последним 5 пробникам
+  const cnt = {};
+  for (const m of mocksOf(s).slice(-5)) for (const n of parseNums(m.miss)) cnt[n] = (cnt[n] || 0) + 1;
+  return Object.entries(cnt).map(([n, c]) => [+n, c]).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+}
+function planStat(s) {
+  if (!s.plan) return null; const st = s.plan.st || {};
+  let d = 0, w = 0; for (let i = 1; i <= s.plan.n; i++) { if (st[i] === 'd') d++; else if (st[i] === 'w') w++; }
+  return { n: s.plan.n, d, w };
+}
+function mockChart(s) {
+  const M = mocksOf(s).filter(m => m.score !== '' && m.score != null); if (M.length < 2) return '';
+  const W = 320, H = 150, pl = 26, pr = 16, pt = 18, pb = 22;
+  const top = Math.max(...M.map(m => +m.max || 0), ...M.map(m => +m.score || 0)) || 1;
+  const x = i => pl + 14 + i * (W - pl - pr - 14) / (M.length - 1), y = v => pt + (H - pt - pb) * (1 - v / top);
+  let g = '';
+  for (const v of [0, top / 2, top]) g += `<line class="ch-grid" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/>` + (v === top / 2 ? '' : `<text class="ch-t" x="${pl - 5}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`);
+  const pts = M.map((m, i) => `${x(i)},${y(+m.score)}`).join(' ');
+  const best = M.reduce((a, m, i) => +m.score > +M[a].score ? i : a, 0);
+  const lab = new Set([0, M.length - 1, best]);
+  const step = Math.ceil(M.length / 5);
+  let dots = '', xl = '';
+  M.forEach((m, i) => {
+    dots += `<circle class="ch-dot" cx="${x(i)}" cy="${y(+m.score)}" r="4.5"/><circle class="ch-hit" cx="${x(i)}" cy="${y(+m.score)}" r="14" data-a="mockTip" data-id="${s.id}" data-m="${m.id}"/>`;
+    if (lab.has(i)) dots += `<text class="ch-v" x="${x(i)}" y="${y(+m.score) - 9}" text-anchor="middle">${+m.score}</text>`;
+    if (i % step === 0 || i === M.length - 1) xl += `<text class="ch-t" x="${x(i)}" y="${H - 6}" text-anchor="middle">${fmtS(m.date)}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Баллы за пробники">${g}<polyline class="ch-line" points="${pts}"/>${dots}${xl}</svg>`;
+}
+function prepHtml(s) {
+  const id = s.id, ps = planStat(s), weak = weakTasks(s), weakSet = new Set(weak.slice(0, 5).map(x => x[0])), M = mocksOf(s);
+  let h = `<h3>Подготовка к экзамену</h3><div class="box">`;
+  if (ps) {
+    h += `<div class="row" style="border:0;padding-top:0"><span><b>План по заданиям</b><small>пройдено ${ps.d} из ${ps.n}${ps.w ? ` · в работе ${ps.w}` : ''}</small></span><button class="link" style="padding:0" data-a="planForm" data-id="${id}">изменить</button></div>
+      <div class="tasks">${Array.from({ length: ps.n }, (_, i) => i + 1).map(n => `<button class="tkn ${(s.plan.st || {})[n] || ''}${weakSet.has(n) ? ' weak' : ''}" data-a="planCycle" data-id="${id}" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="legend"><span><i></i>не начато</span><span><i class="w"></i>в работе</span><span><i class="d"></i>пройдено</span>${weakSet.size ? '<span><i class="weak"></i>частые ошибки</span>' : ''}</div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Нажимайте на номер задания, чтобы сменить отметку.</p>`;
+  } else h += `<button class="link" style="padding-top:0" data-a="planForm" data-id="${id}">+ Составить план по заданиям</button>`;
+  h += `</div><div class="box"><div class="row" style="border:0;padding-top:0"><span><b>Пробники</b>${M.length ? `<small>${M.length} ${plural(M.length, 'пробник', 'пробника', 'пробников')}</small>` : ''}</span><button class="link" style="padding:0" data-a="mockForm" data-id="${id}">+ пробник</button></div>`;
+  h += mockChart(s);
+  if (weak.length) h += `<p style="margin:4px 0 8px;font-size:14px">Чаще всего ошибки: ${weak.slice(0, 5).map(([n, c]) => `№${n}${c > 1 ? ` (${c} ${plural(c, 'раз', 'раза', 'раз')})` : ''}`).join(', ')}</p>`;
+  if (M.length) h += M.slice().reverse().map(m => `<div class="row" data-a="mockForm" data-id="${id}" data-m="${m.id}"><span>${fmtS(m.date)}${m.title ? ' · ' + esc(m.title) : ''}${m.miss ? `<small>ошибки: ${esc(m.miss)}</small>` : ''}</span><b>${m.score !== '' && m.score != null ? +m.score : '—'}${m.max ? `<small style="display:inline;font-weight:400"> из ${+m.max}</small>` : ''}</b></div>`).join('');
+  else h += `<p class="muted" style="font-size:13px;margin:0">Записывайте баллы за пробники — появится график роста и список слабых заданий.</p>`;
+  return h + `</div>`;
+}
+function sPlan(id) {
+  const s = stu(id); if (!s) return null;
+  return `<h2>План по заданиям</h2><p class="muted">${esc(s.name)}${s.exam ? ' · ' + esc(s.exam) : ''}</p>
+    <label>Сколько заданий в экзамене<input id="f_pn" type="number" inputmode="numeric" min="1" max="60" value="${s.plan ? s.plan.n : ''}" placeholder="например, 27"></label>
+    <p class="muted" style="font-size:13px">Проверьте число по актуальной демоверсии ФИПИ. Отметки по заданиям сохранятся, если число изменится.</p>
+    <div class="btns"><button class="pri" data-a="savePlan" data-id="${id}">Сохранить</button></div>
+    ${s.plan ? `<button class="link danger" data-a="delPlan" data-id="${id}">Удалить план</button>` : ''}`;
+}
+function sMock(id, mid) {
+  const s = stu(id); if (!s) return null;
+  const last = mocksOf(s).slice(-1)[0];
+  const m = mid ? (s.mocks || []).find(x => x.id === mid) : { date: today(), title: '', score: '', max: last ? last.max : '', miss: '' };
+  if (!m) return null;
+  return `<h2>${mid ? 'Пробник' : 'Новый пробник'}</h2><p class="muted">${esc(s.name)}</p>
+    <div class="two"><label>Дата<input id="f_mdate" type="date" value="${m.date}"></label><label>Название<input id="f_mtitle" value="${esc(m.title || '')}" placeholder="Пробник №${(s.mocks || []).length + (mid ? 0 : 1)}"></label></div>
+    <div class="two"><label>Балл<input id="f_mscore" type="number" inputmode="numeric" value="${m.score ?? ''}"></label><label>Из скольких<input id="f_mmax" type="number" inputmode="numeric" value="${m.max ?? ''}" placeholder="максимум"></label></div>
+    <label>Задания с ошибками<input id="f_mmiss" value="${esc(m.miss || '')}" placeholder="например: 4, 7, 12–14"></label>
+    <p class="muted" style="font-size:13px">Номера через запятую, можно диапазоны. По ним приложение покажет, где ошибки повторяются.</p>
+    <div class="btns"><button class="pri" data-a="saveMock" data-id="${id}" data-m="${mid || ''}">Сохранить</button></div>
+    ${mid ? `<button class="link danger" data-a="delMock" data-id="${id}" data-m="${mid}">Удалить пробник</button>` : ''}`;
 }
 const isNew = s => s.since && s.since <= today() && daysBetween(s.since, today()) < 30;
 const lessonsWord = n => { const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'занятие' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'занятия' : 'занятий'; };
@@ -490,6 +583,27 @@ function ghosts(from, to) {
   return out;
 }
 
+function durText(min) { const hh = Math.floor(min / 60), mm = min % 60; return hh ? `${hh} ч${mm ? ' ' + mm + ' мин' : ''}` : `${mm} мин`; }
+function todayNext() {
+  const t = today(), now = toMin(nowHM());
+  const L = occ(t, t).filter(o => o.status !== 'cancel').sort((a, b) => a.time.localeCompare(b.time));
+  if (!L.length) return '';
+  const cur = L.find(o => toMin(o.time) <= now && now < toMin(o.time) + (+o.dur || 60));
+  if (cur) return `идёт: ${stu(cur.sid).name}, до ${endT(cur.time, cur.dur)}`;
+  const nx = L.find(o => toMin(o.time) > now);
+  if (nx) return `следующее: ${stu(nx.sid).name} в ${nx.time} — через ${durText(toMin(nx.time) - now)}`;
+  return 'все занятия на сегодня позади';
+}
+function todayHtml() {
+  const t = today(), off = offOf(t);
+  const L = occ(t, t), G = ghosts(t, t);
+  const items = L.concat(G).concat(S.tasks.filter(x => x.date === t).map(x => ({ task: x, time: x.from || '' }))).sort((a, b) => a.time.localeCompare(b.time));
+  const act = L.filter(o => o.status !== 'cancel'), dn = act.filter(o => o.status === 'done');
+  let h = `<div class="todaybox"><div class="th"><b>Сегодня · ${fmtD(t)}${off ? ' · выходной' : ''}</b><small id="todayNext">${esc(todayNext())}</small></div>`;
+  if (act.length) h += `<div class="muted" style="font-size:13px;margin:-4px 4px 8px">занятий: ${act.length}${dn.length ? `, проведено: ${dn.length}` : ''}</div>`;
+  h += items.length ? items.map(o => o.task ? taskCard(o.task) : card(o)).join('') : `<div class="none">${off ? 'выходной' : 'сегодня занятий нет'}</div>`;
+  return h + '</div>';
+}
 function vSched() {
   const t = today(), we = addD(weekStart, 6), L = occ(weekStart, we), G = ghosts(weekStart, we);
   let h = '';
@@ -507,6 +621,7 @@ function vSched() {
   const ws = pd(weekStart), wee = pd(we);
   const title = ws.getMonth() === wee.getMonth() ? `${ws.getDate()}–${wee.getDate()} ${MG[ws.getMonth()]}` : `${ws.getDate()} ${MG[ws.getMonth()]} – ${wee.getDate()} ${MG[wee.getMonth()]}`;
   const act = L.filter(o => o.status !== 'cancel'), dn = L.filter(o => o.status === 'done');
+  if (weekStart === monday(t)) h += todayHtml();
   h += `<div class="weekhead"><button class="nav" data-a="wk" data-d="-7" aria-label="Прошлая неделя">‹</button>
     <div><b>${title}</b><small>занятий: ${act.length}${dn.length ? ', проведено: ' + dn.length : ''}${weekStart !== monday(t) ? ' · <button class="link" data-a="wkToday">к этой неделе</button>' : ''}</small></div>
     <button class="nav" data-a="wk" data-d="7" aria-label="Следующая неделя">›</button></div>`;
@@ -683,7 +798,7 @@ function sCancel(ref) {
 /* ---------- отчёт родителям за месяц ---------- */
 let REP = null;
 const hoursText = min => { const hh = Math.floor(min / 60), mm = min % 60; return ((hh ? hh + ' ч' : '') + (mm ? (hh ? ' ' : '') + mm + ' мин' : '')) || '0 мин'; };
-function reportLines(sid, ym, withPay) {
+function reportLines(sid, ym, withPay, withPrep) {
   const s = stu(sid), [y, m] = ym.split('-').map(Number), from = ym + '-01', to = ymd(new Date(y, m, 0));
   const L = occ(from, to).filter(o => o.sid === sid);
   const done = L.filter(o => o.status === 'done'), late = L.filter(o => o.status === 'cancel' && o.charge), canc = L.filter(o => o.status === 'cancel' && !o.charge);
@@ -697,6 +812,17 @@ function reportLines(sid, ym, withPay) {
     out.push({ k: 'item', t: `${fmtD(o.date)}, ${o.time} · ${o.dur} мин` + (o.label ? ` · ${o.label}` : '') });
     if (o.topic) out.push({ k: 'kv', a: 'Проходили: ', t: o.topic });
     if (o.hw) out.push({ k: 'kv', a: 'Домашнее задание: ', t: o.hw });
+  }
+  if (withPrep) {
+    const M = mocksOf(s), inM = M.filter(x => x.date >= from && x.date <= to), ps = planStat(s), weak = weakTasks(s);
+    if (inM.length || ps || weak.length) out.push({ k: 'h2', t: 'Подготовка к экзамену' + (s.exam ? ` (${s.exam})` : '') });
+    for (const x of inM) {
+      const prev = M[M.indexOf(x) - 1], sc = +x.score;
+      const diff = prev && prev.score !== '' && x.score !== '' ? sc - (+prev.score) : null;
+      out.push({ k: 'kv', a: `${x.title || 'Пробник'} (${fmtS(x.date)}): `, t: `${sc}${x.max ? ' из ' + (+x.max) : ''} баллов` + (diff ? ` (${diff > 0 ? '+' : ''}${diff} к прошлому)` : '') });
+    }
+    if (ps) out.push({ k: 'kv', a: 'Пройдено заданий: ', t: `${ps.d} из ${ps.n}` + (ps.w ? `, в работе ещё ${ps.w}` : '') });
+    if (weak.length) out.push({ k: 'kv', a: 'Над чем работаем: ', t: 'задания ' + weak.slice(0, 5).map(w => '№' + w[0]).join(', ') });
   }
   if (withPay) {
     const c = cov(sid);
@@ -775,13 +901,14 @@ function sReport(id) {
   const months = []; const d0 = pd(today().slice(0, 7) + '-01');
   for (let i = 0; i < 6; i++) { const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1); months.push(ymd(d).slice(0, 7)); }
   if (!REP || REP.id !== id) {
-    const cur = reportLines(id, months[0], false);
-    REP = { id, ym: cur.done || pd(today()).getDate() > 7 ? months[0] : months[1], pay: false };
+    const cur = reportLines(id, months[0], false, false);
+    REP = { id, ym: cur.done || pd(today()).getDate() > 7 ? months[0] : months[1], pay: false, prep: !!(s.plan || (s.mocks || []).length) };
   }
-  const r = reportLines(id, REP.ym, REP.pay);
+  const r = reportLines(id, REP.ym, REP.pay, REP.prep);
   return `<h2>Отчёт за месяц</h2><p class="muted">${esc(s.name)} · даты, темы и ДЗ из заметок к занятиям</p>
     <label>Месяц<select id="f_rym" data-a2="repMonth">${months.map(ym => { const [y, m] = ym.split('-').map(Number); return `<option value="${ym}"${ym === REP.ym ? ' selected' : ''}>${MN[m - 1]} ${y}</option>`; }).join('')}</select></label>
     <label class="check"><input id="f_rpay" type="checkbox"${REP.pay ? ' checked' : ''}>Добавить сведения об оплате</label>
+    <label class="check"><input id="f_rprep" type="checkbox"${REP.prep ? ' checked' : ''}>Добавить пробники и план подготовки</label>
     ${r.done ? '' : '<p class="note">В этом месяце нет отмеченных проведённых занятий — отчёт будет почти пустым.</p>'}
     <div class="btns"><button class="pri" data-a="repPdf" data-id="${id}">PDF</button><button class="pri" data-a="repDocx" data-id="${id}">Word</button></div>
     <div class="btns"><button class="btn" data-a="repText" data-id="${id}">Текстом в мессенджер</button></div>
@@ -949,7 +1076,7 @@ function sStu(id) {
   const b = bal(id);
   let h = `<h2>${esc(s.name)}</h2><p class="muted">${rub(s.rate)} в час${s.since ? ' · занимается с ' + fmtS(s.since) + '.' + s.since.slice(0, 4) : ''}${s.note ? ' · ' + esc(s.note) : ''}</p>
     <div>${badge(b, id)}</div>
-    ${(() => { const e = examInfo(s); return e ? `<div class="hwprev">До ${esc(e.name)} (${fmtD(s.examDate)}): <b>${e.days} ${plural(e.days, 'день', 'дня', 'дней')}</b> · по расписанию ещё <b>${e.left} ${lessonsWord(e.left)}</b></div>` : ''; })()}
+    ${(() => { const e = examInfo(s); return e ? `<div class="hwprev">До ${esc(e.name)} (${fmtD(s.examDate)}): <b>${e.days} ${plural(e.days, 'день', 'дня', 'дней')}</b> · по расписанию ещё <b>${e.left} ${lessonsWord(e.left)}</b>${(() => { const p = planStat(s); return p ? ` · план: ${p.d}/${p.n}` : ''; })()}</div>` : ''; })()}
     <div class="stats">
       <div><small>Всего оплачено</small><b>${rub(b.paid)}</b></div>
       <div><small>Проведено занятий</small><b>${b.count}</b><small>на ${rub(b.cost)}</small></div>
@@ -966,6 +1093,7 @@ function sStu(id) {
     <h3>Постоянное расписание</h3><div class="box">${activeSlots(id).map(x => `<div class="row" data-a="slotForm" data-id="${id}" data-slot="${x.id}"><span>${WDF[x.wd - 1]}, ${x.time}–${endT(x.time, x.dur)}${x.every === 2 ? ' · раз в 2 недели' : ''}${x.label ? `<small>${esc(x.label)}</small>` : ''}</span><small>${x.from > today() ? 'с ' + fmtS(x.from) : ''}${x.to ? ' до ' + fmtS(x.to) : ''} ›</small></div>`).join('') || '<p class="muted" style="margin:0">Постоянного времени нет.</p>'}
     <button class="link" data-a="slotForm" data-id="${id}">+ Добавить время</button></div>
     <button class="link" data-a="reportForm" data-id="${id}">📄 Отчёт родителям за месяц</button>`;
+  if (!s.archived) h += prepHtml(s);
   const pays = S.pays.filter(p => p.sid === id).sort((a, b) => b.date.localeCompare(a.date));
   h += `<h3>Оплаты</h3>` + (pays.length ? `<div class="box">${pays.map(p => `<div class="row" data-a="payDel" data-p="${p.id}"><span>${fmtS(p.date)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</span><b>${rub(p.amount)}</b></div>`).join('')}</div><p class="muted" style="font-size:13px">Чтобы удалить ошибочную оплату, нажмите на неё.</p>` : `<div class="empty">Оплат пока не было.</div>`);
   const L = b.lessons.slice(-12).reverse();
@@ -1098,15 +1226,15 @@ const A = {
   },
   reportForm: d => { REP = null; openSheet(() => sReport(d.id)); },
   repPdf: d => {
-    readRep(); const r = reportLines(d.id, REP.ym, REP.pay);
+    readRep(); const r = reportLines(d.id, REP.ym, REP.pay, REP.prep);
     $('#printArea').innerHTML = reportHtml(r.lines);
     const t0 = document.title; document.title = r.file;
     window.addEventListener('afterprint', () => { document.title = t0; }, { once: true });
     setTimeout(() => window.print(), 50);
   },
-  repDocx: d => { readRep(); const r = reportLines(d.id, REP.ym, REP.pay); giveFile(reportDocx(r.lines), r.file + '.docx'); },
+  repDocx: d => { readRep(); const r = reportLines(d.id, REP.ym, REP.pay, REP.prep); giveFile(reportDocx(r.lines), r.file + '.docx'); },
   repText: async d => {
-    readRep(); const t = reportText(reportLines(d.id, REP.ym, REP.pay).lines);
+    readRep(); const t = reportText(reportLines(d.id, REP.ym, REP.pay, REP.prep).lines);
     if (navigator.share) { try { await navigator.share({ text: t }); return; } catch (e) { if (e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(t); toast('Текст отчёта скопирован — вставьте в мессенджер'); } catch (e) { toast('Не удалось скопировать'); }
   },
@@ -1213,6 +1341,29 @@ const A = {
     save(); closeSheet(); refresh();
   },
 
+  planForm: d => openSheet(() => sPlan(d.id)),
+  savePlan: d => {
+    const n = Math.round(+val('f_pn')); if (!(n >= 1 && n <= 60)) return toast('Нужно число от 1 до 60');
+    const s = stu(d.id); s.plan = { n, st: (s.plan && s.plan.st) || {} }; save(); openSheet(() => sStu(d.id)); refresh();
+  },
+  delPlan: d => { const u = snap(); delete stu(d.id).plan; save(); openSheet(() => sStu(d.id)); toast('План удалён', undoTo(u)); refresh(); },
+  planCycle: d => {
+    const s = stu(d.id); if (!s || !s.plan) return; s.plan.st = s.plan.st || {};
+    const cur = s.plan.st[d.n] || '', next = cur === '' ? 'w' : cur === 'w' ? 'd' : '';
+    if (next) s.plan.st[d.n] = next; else delete s.plan.st[d.n];
+    save(); drawSheet();
+  },
+  mockForm: d => openSheet(() => sMock(d.id, d.m || null)),
+  saveMock: d => {
+    const s = stu(d.id), date = val('f_mdate') || today(), sc = val('f_mscore'), mx = val('f_mmax');
+    if (sc === '') return toast('Введите балл');
+    const rec = { date, title: val('f_mtitle'), score: +sc, max: mx === '' ? '' : +mx, miss: val('f_mmiss') };
+    s.mocks = s.mocks || [];
+    if (d.m) Object.assign(s.mocks.find(x => x.id === d.m), rec); else s.mocks.push({ id: uid(), ...rec });
+    save(); openSheet(() => sStu(d.id)); toast('Пробник сохранён'); refresh();
+  },
+  delMock: d => { const u = snap(), s = stu(d.id); s.mocks = (s.mocks || []).filter(x => x.id !== d.m); save(); openSheet(() => sStu(d.id)); toast('Пробник удалён', undoTo(u)); refresh(); },
+  mockTip: d => { const m = (stu(d.id).mocks || []).find(x => x.id === d.m); if (m) toast(`${m.title || 'Пробник'} ${fmtS(m.date)}: ${+m.score}${m.max ? ' из ' + (+m.max) : ''}`); },
   saveDayMax: () => { const n = Math.round(+val('f_daymax')); if (!(n >= 1)) return toast('Нужно число от 1'); S.dayMax = n; save(); toast('Сохранено'); refresh(); },
   newOff: () => openSheet(() => sOff(null)),
   openOff: d => openSheet(() => sOff(d.id)),
@@ -1266,11 +1417,12 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-a]'); if (!t) return;
   const f = A[t.dataset.a]; if (f) { e.preventDefault(); f(t.dataset, t, e); }
 });
-function readRep() { if (!REP) return; const m = document.getElementById('f_rym'), c = document.getElementById('f_rpay'); if (m) REP.ym = m.value; if (c) REP.pay = c.checked; }
+function readRep() { if (!REP) return; const m = document.getElementById('f_rym'), c = document.getElementById('f_rpay'), q = document.getElementById('f_rprep'); if (m) REP.ym = m.value; if (c) REP.pay = c.checked; if (q) REP.prep = q.checked; }
 // при выборе даты/времени показываем нагрузку этого дня
 ['input', 'change'].forEach(ev => document.addEventListener(ev, e => { if (['f_date', 'f_time', 'f_dur'].includes(e.target.id)) updateDayInfo(); }));
 // смена месяца или галочки в отчёте сразу обновляет предпросмотр
-document.addEventListener('change', e => { if ((e.target.id === 'f_rym' || e.target.id === 'f_rpay') && REP) { readRep(); drawSheet(); } });
+document.addEventListener('change', e => { if ((['f_rym', 'f_rpay', 'f_rprep'].includes(e.target.id)) && REP) { readRep(); drawSheet(); } });
+setInterval(() => { const el = document.getElementById('todayNext'); if (el) el.textContent = todayNext(); }, 30000);
 /* листание недель свайпом влево-вправо */
 function goWeek(dir) {
   weekStart = addD(weekStart, 7 * dir); render();
