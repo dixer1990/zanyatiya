@@ -212,7 +212,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.17 · 12 ноября 2026';
+const VERSION = '1.18 · 14 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -976,7 +976,7 @@ function sFree() {
     let r;
     if (off) r = `<span class="muted">выходной${off.note ? ' · ' + esc(off.note) : ''}</span>`;
     else if (n >= max) r = `<span class="unp">уже ${n} ${lessonsWord(n)} — это ваш максимум</span>`;
-    else r = (w.length ? w.map(([a, b]) => `<button class="win" data-a="freePick" data-date="${date}" data-from="${toHM(a)}" data-to="${toHM(b)}">${toHM(a)}–${toHM(b)}</button>`).join('') : '<span class="muted">нет окон</span>') + `<small>${n ? `уже ${n} ${lessonsWord(n)}${f.mode === 'perm' ? ' (в самый загруженный из 4 дней)' : ''}` : 'занятий нет'}</small>`;
+    else r = (w.length ? w.map(([a, b]) => `<button class="win" data-a="freePick" data-date="${date}" data-from="${toHM(a)}" data-to="${toHM(b)}">${toHM(a)}–${toHM(b)}</button>`).join('') : '<span class="muted">нет окон</span>') + `<small>${n ? `уже ${n} ${lessonsWord(n)}` : 'занятий нет'}</small>`;
     return `<div class="row"><b>${d}</b><span style="text-align:right">${r}</span></div>`;
   }).join('')}</div>`;
   h += `<p class="muted" style="font-size:13px">Нажмите на промежуток, чтобы сразу поставить туда занятие.</p>`;
