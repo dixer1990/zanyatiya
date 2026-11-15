@@ -116,6 +116,10 @@ textarea{resize:vertical;min-height:70px}
 .todaybox .th{display:flex;flex-direction:column;gap:2px;padding:0 4px 8px}
 .todaybox .th b{color:var(--acc);font-size:15px}.todaybox .th small{color:var(--acc);font-size:13px}
 .todaybox .none{margin:0 4px 8px}
+.cbrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.cbrow:last-child{border-bottom:0}.cbrow>div{flex:1;min-width:0}.cbrow small{display:block;color:var(--mut);font-size:12px}
+.cb{width:26px;height:26px;border-radius:7px;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;color:transparent;font-weight:700}
+.cb.on{background:var(--ok);border-color:var(--ok);color:var(--onacc)}
 .note.bad{background:var(--badb);color:var(--bad)}
 .day.off .dh{color:var(--task);font-weight:700}
 .offtag{border:0;background:none;color:var(--task);font:inherit;padding:0;text-decoration:underline;text-transform:none;letter-spacing:0}
@@ -212,7 +216,7 @@ body.sheet-open{overflow:hidden}
 
 <script>
 'use strict';
-const VERSION = '1.18 · 14 ноября 2026';
+const VERSION = '1.19 · 15 ноября 2026';
 const KEY = 'uchet-data-v1';
 
 /* ---------- даты ---------- */
@@ -654,6 +658,7 @@ function vStu() {
     if (act.length) h += `<div class="stats" style="margin-top:0">
       <div><small>Всего учеников</small><b>${act.length}</b>${arch ? `<small>и ${arch} в архиве</small>` : ''}</div>
       <div><small>Новых в ${MN[+ym.slice(5) - 1].toLowerCase().replace(/ь$/, 'е').replace(/й$/, 'е').replace(/т$/, 'те')}</small><b>${newM}</b></div></div>`;
+    for (const { x, done, all } of offsToNotify()) h += `<div class="banner ${done < all ? 'warn' : 'info'}" data-a="notifyForm" data-id="${x.id}">${esc(offTitle(x))}: предупреждены ${done} из ${all}${done === all ? ' ✓' : ''}<span>›</span></div>`;
   }
   if (!list.length) h += `<div class="empty">${showArchive ? 'В архиве пусто.' : 'Пока нет учеников. Нажмите «+ Ученик».'}</div>`;
   for (const s of list) h += `<div class="stu" data-a="openStu" data-id="${s.id}"><div><b>${esc(s.name)}</b>${isNew(s) ? ' <span class="chip new">новый</span>' : ''}
@@ -776,9 +781,8 @@ function sLes(ref) {
   if (o.kind === 'slot' && o.moved && o.status !== 'done') h += `<button class="link" data-a="lesRestore" data-r="${ref}">Вернуть на время по расписанию</button>`;
   if (o.kind === 'extra' && o.status !== 'done') h += `<button class="link danger" data-a="lesDel" data-r="${ref}">Удалить это разовое занятие</button>`;
   const ph = prevHw(o);
-  if (o.topic || o.hw || ph) {
-    h += `<div class="box">${ph && !o.topic ? `<small class="muted">ДЗ с прошлого (${fmtS(ph.date)}): ${esc(ph.hw)}</small><br>` : ''}${o.topic ? `<b>Проходили:</b> ${esc(o.topic)}<br>` : ''}${o.hw ? `<b>ДЗ:</b> ${esc(o.hw)}` : ''}</div>`;
-  }
+  h += prevBlock(ph);
+  if (o.topic || o.hw) h += `<div class="box"><b>Это занятие</b>${o.topic ? `<br><b>Проходили:</b> ${nl(o.topic)}` : ''}${o.hw ? `<br><b>ДЗ:</b> ${nl(o.hw)}` : ''}</div>`;
   h += `<button class="link" data-a="noteForm" data-r="${ref}">📄 ${o.topic || o.hw ? 'Изменить заметки' : 'Заметки к занятию'}</button>`;
   h += `<button class="link" data-a="openStu" data-id="${s.id}">Карточка ученика ›</button>`;
   return h;
@@ -1047,15 +1051,21 @@ function sTask(id) {
     <div class="btns"><button class="pri" data-a="saveTask" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>
     ${id ? `<button class="link danger" data-a="delTask" data-id="${id}">Удалить дело</button>` : ''}`;
 }
+// предыдущее занятие ученика, где есть заметки (что проходили и/или ДЗ)
 function prevHw(o) {
-  const L = occ(addD(o.date, -120), o.date).filter(x => x.sid === o.sid && x.status !== 'cancel' && (x.date + x.time) < (o.date + o.time) && x.hw);
+  const L = occ(addD(o.date, -120), o.date).filter(x => x.sid === o.sid && x.status !== 'cancel' && (x.date + x.time) < (o.date + o.time) && (x.hw || x.topic));
   return L.length ? L[L.length - 1] : null;
+}
+const nl = t => esc(t).replace(/\n/g, '<br>');
+function prevBlock(p) {
+  if (!p) return '';
+  return `<div class="hwprev"><b>Прошлое занятие</b> (${fmtD(p.date)}):${p.topic ? `<br><b>Проходили:</b> ${nl(p.topic)}` : ''}${p.hw ? `<br><b>ДЗ:</b> ${nl(p.hw)}` : ''}</div>`;
 }
 function sNote(ref) {
   const o = getOcc(ref); if (!o) return null;
   const p = prevHw(o);
   return `<h2>Заметки к занятию</h2><p class="muted">${esc(stu(o.sid).name)} · ${fmtD(o.date)}, ${o.time}</p>
-    ${p ? `<div class="hwprev"><b>ДЗ с прошлого занятия</b> (${fmtD(p.date)}):<br>${esc(p.hw)}</div>` : ''}
+    ${prevBlock(p)}
     <label>Что проходили<textarea id="f_topic" rows="3" placeholder="тема, что разобрали, что не получилось">${esc(o.topic || '')}</textarea></label>
     <label>Домашнее задание<textarea id="f_hw" rows="3" placeholder="что задано к следующему разу">${esc(o.hw || '')}</textarea></label>
     <div class="btns"><button class="pri" data-a="saveNote" data-r="${ref}">Сохранить</button></div>`;
@@ -1063,6 +1073,38 @@ function sNote(ref) {
 function offSlotsInfo(wd) {
   const L = S.slots.filter(x => x.wd === wd && (!x.to || x.to >= today()) && stu(x.sid) && !stu(x.sid).archived);
   return L.length ? `<p class="note">По этому дню стоят постоянные занятия: ${L.map(x => `${esc(stu(x.sid).name)} ${x.time}`).join(', ')}. Выходной их не отменяет — перенесите их в карточке ученика (постоянное расписание).</p>` : '';
+}
+const WD_PL = ['по понедельникам', 'по вторникам', 'по средам', 'по четвергам', 'по пятницам', 'по субботам', 'по воскресеньям'];
+const offTitle = x => x.weekly ? `Постоянный выходной ${WD_PL[x.weekly - 1]}` : (x.from === x.to ? fmtD(x.from) : `${fmtD(x.from)} — ${fmtD(x.to)}`) + (x.note ? ` · ${x.note}` : '');
+// какие выходные сейчас актуальны для оповещения учеников
+function offsToNotify() {
+  const act = S.students.filter(s => !s.archived), t = today();
+  return (S.offs || []).filter(x => x.weekly ? act.some(s => !(x.told || []).includes(s.id)) : x.to >= t)
+    .map(x => ({ x, done: act.filter(s => (x.told || []).includes(s.id)).length, all: act.length }));
+}
+function offAffects(x, sid) {        // сколько занятий ученика попадает на выходной (для постоянного — в ближайшие 4 недели)
+  const from = x.weekly ? (x.from > today() ? x.from : today()) : x.from, to = x.weekly ? addD(from, 27) : x.to;
+  return occ(from, to).filter(o => o.sid === sid && o.status !== 'cancel' && (!x.weekly || wdOf(o.date) === x.weekly)).length;
+}
+const dm = s => { const d = pd(s); return `${d.getDate()} ${MG[d.getMonth()]}`; };
+function offMessage(x) {
+  if (x.weekly) return `Здравствуйте! Предупреждаю: с ${dm(x.from)} у меня выходной ${WD_PL[x.weekly - 1]}${x.note ? ` (${x.note})` : ''}. Если у нас занятия в этот день, давайте подберём другое время.`;
+  const a = pd(x.from), b = pd(x.to);
+  const when = x.from === x.to ? dm(x.from) : a.getMonth() === b.getMonth() ? `с ${a.getDate()} по ${dm(x.to)}` : `с ${dm(x.from)} по ${dm(x.to)}`;
+  return `Здравствуйте! Предупреждаю: ${when} у меня ${x.note || 'выходные'}, занятий не будет. Если на эти дни у нас стоит занятие, давайте договоримся о переносе.`;
+}
+function sNotify(id) {
+  const x = (S.offs || []).find(o => o.id === id); if (!x) return null;
+  const told = new Set(x.told || []);
+  const list = S.students.filter(s => !s.archived).map(s => ({ s, n: offAffects(x, s.id) }))
+    .sort((a, b) => (b.n > 0) - (a.n > 0) || a.s.name.localeCompare(b.s.name, 'ru'));
+  const done = list.filter(r => told.has(r.s.id)).length;
+  return `<h2>Кого предупредил</h2><p class="muted">${esc(offTitle(x))}</p>
+    <div class="hwprev">Предупреждено: <b>${done} из ${list.length}</b>${done === list.length && list.length ? ' — все ✓' : ''}</div>
+    <div class="btns"><button class="btn" data-a="notifyText" data-id="${id}">Текст сообщения</button><button class="btn" data-a="notifyAll" data-id="${id}">${done === list.length ? 'Снять все' : 'Отметить всех'}</button></div>
+    <div class="box">${list.map(({ s, n }) => `<div class="cbrow" data-a="notifyToggle" data-id="${id}" data-s="${s.id}"><span class="cb${told.has(s.id) ? ' on' : ''}">✓</span>
+      <div><b>${esc(s.name)}</b><small>${n ? `занятий в эти дни: ${n}` : 'занятий в эти дни нет'}</small></div></div>`).join('') || '<p class="muted" style="margin:0">Учеников пока нет.</p>'}</div>
+    <p class="muted" style="font-size:13px">Нажимайте на ученика, чтобы отметить. Сверху — те, у кого на эти дни стоят занятия.</p>`;
 }
 function sOff(id) {
   const x = id ? (S.offs || []).find(o => o.id === id) : { from: weekStart === monday(today()) ? today() : weekStart, to: '', note: '' };
@@ -1075,7 +1117,7 @@ function sOff(id) {
       <div id="offInfo">${offSlotsInfo(wd)}</div></div>
     <label>Подпись (необязательно)<input id="f_onote" value="${esc(x.note || '')}" placeholder="например, отпуск, день для учёбы"></label>
     <div class="btns"><button class="pri" data-a="saveOff" data-id="${id || ''}">${id ? 'Сохранить' : 'Добавить'}</button></div>
-    ${id ? `<button class="link danger" data-a="delOff" data-id="${id}">Убрать выходной</button>` : ''}`;
+    ${id ? `<button class="link" data-a="notifyForm" data-id="${id}">Кого предупредил: ${(() => { const act = S.students.filter(s => !s.archived); return act.filter(s => (x.told || []).includes(s.id)).length + ' из ' + act.length; })()} ›</button><button class="link danger" data-a="delOff" data-id="${id}">Убрать выходной</button>` : ''}`;
 }
 function sExtra() {
   const list = S.students.filter(s => !s.archived).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -1431,6 +1473,23 @@ const A = {
       msg += `, отменено занятий: ${L.length}`;
     }
     save(); closeSheet(); toast(msg, undoTo(u)); refresh();
+  },
+  notifyForm: d => openSheet(() => sNotify(d.id)),
+  notifyToggle: d => {
+    const x = (S.offs || []).find(o => o.id === d.id); if (!x) return;
+    x.told = x.told || []; const i = x.told.indexOf(d.s);
+    if (i >= 0) x.told.splice(i, 1); else x.told.push(d.s);
+    save(); BAL = {}; COV = {}; render(); drawSheet();
+  },
+  notifyAll: d => {
+    const x = (S.offs || []).find(o => o.id === d.id); if (!x) return;
+    const act = S.students.filter(s => !s.archived).map(s => s.id);
+    x.told = act.every(id => (x.told || []).includes(id)) ? [] : act; save(); render(); drawSheet();
+  },
+  notifyText: async d => {
+    const x = (S.offs || []).find(o => o.id === d.id); if (!x) return; const t = offMessage(x);
+    if (navigator.share) { try { await navigator.share({ text: t }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(t); toast('Текст скопирован — вставьте в мессенджер'); } catch (e) { toast('Не удалось скопировать'); }
   },
   delOff: d => { const u = snap(); S.offs = (S.offs || []).filter(o => o.id !== d.id); save(); closeSheet(); toast('Выходной убран', undoTo(u)); refresh(); },
   saveLimit: () => { const n = Math.round(+val('f_limit')); if (!(n >= 1)) return toast('Нужно число от 1'); S.limit = n; save(); toast('Сохранено'); refresh(); },
